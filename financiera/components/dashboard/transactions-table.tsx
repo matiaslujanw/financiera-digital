@@ -7,6 +7,7 @@ import { dayjs } from "~/utils/dayjs";
 import { formatPrice, getTypeLabel } from "~/utils/format";
 import { CreateTransactionDialog } from "./create-transaction-dialog";
 import { CreateCheckPurchaseDialog } from "./create-check-purchase-dialog";
+import { CreateCheckSaleDialog } from "./create-check-sale-dialog";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -50,6 +51,7 @@ export function TransactionsTable({ guildSlug }: { guildSlug: string }) {
 				</div>
 				<div className="flex items-center gap-2">
 					<CreateCheckPurchaseDialog guildSlug={guildSlug} />
+					<CreateCheckSaleDialog guildSlug={guildSlug} />
 					<CreateTransactionDialog guildSlug={guildSlug} />
 				</div>
 			</div>

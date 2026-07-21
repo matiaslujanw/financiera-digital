@@ -11,8 +11,10 @@ export default async function TransactionsPage(props: {
 }) {
 	const { guildSlug } = await props.params;
 
-	prefetch(trpc.accountOnBusiness.guildSummary.queryOptions({ guildSlug }));
-	prefetch(trpc.transaction.countByGuildSlug.queryOptions({ guildSlug }));
+	await Promise.all([
+		prefetch(trpc.accountOnBusiness.guildSummary.queryOptions({ guildSlug })),
+		prefetch(trpc.transaction.countByGuildSlug.queryOptions({ guildSlug })),
+	]);
 
 	return (
 		<HydrateClient>

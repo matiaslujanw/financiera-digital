@@ -101,17 +101,20 @@ Verificación con la captura (pesif. 3%): `pesificación = 3% × bruto` ✓. Not
 
 Todo se agrupa en un `TransactionGroup` con `operationType = CHECK_PURCHASE`, y se crea el registro en `Check` (status `PURCHASED`).
 
-**VENTA** (a confirmar el detalle al implementar): mismo cálculo con las tasas de venta (`saleServiceFeeRate`, `saleMonthlyInterestRate`); el cheque pasa a status `SOLD`; la ganancia es el spread entre neto de compra y de venta. Revisar `transaction.ts createMultiple` + `special.tsx` para el desglose exacto de transacciones de venta.
+**VENTA — confirmada e implementada:** usa la misma fórmula con las tasas de venta, pero `díasTotales = díasEntre(saleDate → collectionDate) + bankClearing`. La permanencia se muestra aparte como `díasEnCartera = díasEntre(purchaseDate → saleDate)`, y la ganancia es `netoVenta − netoCompra`.
+
+Las 4 transacciones por cheque vendido son: **Cartera de cheques −netoCompra**, **Efectivo +netoVenta**, **Pesificación −pesificaciónVenta** e **Intereses cobrados −interésVenta**. Se agrupan en `CHECK_SALE` y el cheque pasa a `SOLD`; los vencidos no se pueden vender.
 
 - [x] **(0)** Preguntas de fórmulas respondidas por el usuario ✔
 - [x] Portar `calculatePurchaseValues` a `server/api/lib/financial-utils` con las fórmulas confirmadas + pruebas unitarias
-- [ ] Portar `calculateSaleValues` al implementar la venta
+- [x] Portar `calculateSaleValues` con pruebas unitarias
 - [x] **Compra de cheques:** alta de uno o varios cheques → crea 4 transacciones por cheque + un `TransactionGroup` (operationType `CHECK_PURCHASE`). Cheque queda `PURCHASED`
 - [x] UI compra: formulario con pesificación %, interés mensual %, cliente, fecha; filas de cheque (fecha cobro, clearing, monto, librador, N°, banco); totales en vivo
-- [ ] **Venta de cheques:** selección de cheques disponibles, cálculo de neto/interés/desagio, `TransactionGroup` `CHECK_SALE`. Cheque queda `SOLD`
-- [ ] UI venta: lista de cheques disponibles con estado (vencido/días), selección múltiple, totales
-- [ ] Estados del cheque (`PURCHASED` / `SOLD` / `DEPOSITED` / `REJECTED`)
-- [ ] **Verificación:** comprar cheques y luego venderlos; ver ganancia y balances
+- [x] **Venta de cheques:** selección de cheques disponibles, cálculo de neto/interés, `TransactionGroup` `CHECK_SALE`. Cheque queda `SOLD`
+- [x] UI venta: selección múltiple, vencimiento, días en cartera, días de cálculo, costo de compra, valor de venta, ganancia/pérdida y rentabilidad, por cheque y total
+- [x] Estados del cheque `PURCHASED` / `SOLD`
+- [ ] Estados restantes del cheque `DEPOSITED` / `REJECTED`
+- [x] **Verificación compra → venta:** ganancia y balances comprobados en navegador y DB
 - [x] **Verificación parcial (compra):** compra simple ($100.000 → neto $90.600) y múltiple (2 cheques → 8 movimientos) comprobadas en navegador/DB; balances, grupo y estado `PURCHASED` correctos
 
 ---
@@ -221,4 +224,11 @@ utils/        format.ts, dayjs.ts
 - Agregada mutación atómica `check.purchase`: alta/reutilización rápida de cliente, `Check` en estado `PURCHASED`, vínculo al `TransactionGroup` `CHECK_PURCHASE` y 4 movimientos por cheque con actualización de balances.
 - Agregada UI para uno o varios cheques con empresa, cliente, fecha, tasas, datos bancarios y totales en vivo. Por ahora la compra opera en ARS; monedas se ampliarán en la fase correspondiente.
 - Verificado end-to-end: compra de $100.000 → cartera +$90.600, efectivo −$90.600, pesificación +$3.000 e intereses +$6.400. También se probó una compra de 2 cheques: un solo grupo `CHECK_PURCHASE`, ambos `PURCHASED` y exactamente 8 transacciones.
-- Pendiente de Fase 2: venta de cheques y transiciones restantes de estado.
+- La compra quedó cerrada; el siguiente bloque de trabajo fue la venta de cheques.
+
+### 2026-07-21 — Fase 2 en curso: venta de cheques completada
+- Portado `calculateSaleValues` y agregada la mutación atómica `check.sale`, con bloqueo de registros y validación para impedir vender cheques vencidos, ya vendidos o pertenecientes a otra empresa.
+- Agregada UI de venta múltiple con comprador, fecha y tasas. Cada fila muestra costo de compra, valor de venta, ganancia/pérdida, días en cartera y días usados para calcular el precio; el resumen agrega valor de venta, resultado, rentabilidad y permanencia promedio.
+- Verificado end-to-end con F2-001: costo $90.600, venta $95.300, ganancia $4.700 y 5 días en cartera. Persistió `SOLD`, comprador, grupo `CHECK_SALE` y exactamente 4 movimientos; los balances quedaron consistentes.
+- Corregido el prefetch de RSC para esperar las consultas antes de hidratar y evitar que el contador de transacciones difiriera entre servidor y cliente.
+- Pendiente de Fase 2: definir e implementar depósito y rechazo (`DEPOSITED` / `REJECTED`).

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { calculatePurchaseValues } from "./financial-utils";
+import { calculatePurchaseValues, calculateSaleValues } from "./financial-utils";
 
 test("calcula pesificación plana e interés simple incluyendo clearing", () => {
 	const result = calculatePurchaseValues({
@@ -53,4 +53,21 @@ test("rechaza una fecha de cobro anterior a la compra", () => {
 			}),
 		/fecha de cobro/i,
 	);
+});
+
+test("calcula el valor de venta y permite obtener la ganancia sobre el neto de compra", () => {
+	const sale = calculateSaleValues({
+		grossValue: 100_000,
+		serviceFeeRate: 2,
+		monthlyInterestRate: 3,
+		saleDate: new Date("2026-07-26T12:00:00-03:00"),
+		collectionDate: new Date("2026-08-20T12:00:00-03:00"),
+		bankClearing: 2,
+	});
+
+	assert.equal(sale.totalDays, 27);
+	assert.equal(sale.serviceFeeAmount, 2_000);
+	assert.equal(sale.interestAmount, 2_700);
+	assert.equal(sale.netValue, 95_300);
+	assert.equal(sale.netValue - 90_600, 4_700);
 });

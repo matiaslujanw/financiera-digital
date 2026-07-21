@@ -34,18 +34,18 @@ export function HydrateClient(props: { children: React.ReactNode }) {
 }
 
 // Prefetch en RSC (soporta queries normales e infinitas).
-export function prefetch<T extends { queryKey: readonly unknown[] }>(
+export async function prefetch<T extends { queryKey: readonly unknown[] }>(
 	queryOptions: T,
-) {
+): Promise<void> {
 	const queryClient = getQueryClient();
 	if (
 		(queryOptions.queryKey[1] as { type?: string } | undefined)?.type ===
 		"infinite"
 	) {
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		void queryClient.prefetchInfiniteQuery(queryOptions as any);
+		await queryClient.prefetchInfiniteQuery(queryOptions as any);
 	} else {
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		void queryClient.prefetchQuery(queryOptions as any);
+		await queryClient.prefetchQuery(queryOptions as any);
 	}
 }

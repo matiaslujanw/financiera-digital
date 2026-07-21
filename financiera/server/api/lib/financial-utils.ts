@@ -20,6 +20,8 @@ export interface PurchaseValues {
 	netValue: number;
 }
 
+export type SaleValues = PurchaseValues;
+
 /**
  * Calcula el descuento de compra de un cheque.
  *
@@ -92,4 +94,23 @@ export function calculatePurchaseValues(input: {
 		interestAmount,
 		netValue,
 	};
+}
+
+/** Calcula el valor neto de venta usando los días desde la venta al cobro. */
+export function calculateSaleValues(input: {
+	grossValue: number;
+	serviceFeeRate: number;
+	monthlyInterestRate: number;
+	saleDate: Date;
+	collectionDate: Date;
+	bankClearing: number;
+}): SaleValues {
+	return calculatePurchaseValues({
+		grossValue: input.grossValue,
+		serviceFeeRate: input.serviceFeeRate,
+		monthlyInterestRate: input.monthlyInterestRate,
+		purchaseDate: input.saleDate,
+		collectionDate: input.collectionDate,
+		bankClearing: input.bankClearing,
+	});
 }

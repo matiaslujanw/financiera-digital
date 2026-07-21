@@ -116,3 +116,16 @@ export const CheckPurchaseSchema = z
 	});
 
 export type CheckPurchaseInput = z.infer<typeof CheckPurchaseSchema>;
+
+export const CheckSaleSchema = z.object({
+	guildSlug: z.string().min(1),
+	businessId: z.string().uuid(),
+	saleDate: z.coerce.date(),
+	serviceFeeRate: z.number().min(0).max(100),
+	monthlyInterestRate: z.number().min(0).max(1_000),
+	buyerName: z.string().trim().min(2).max(255),
+	about: z.string().trim().max(1_000).optional(),
+	checkIds: z.array(z.string().uuid()).min(1).max(50),
+});
+
+export type CheckSaleInput = z.infer<typeof CheckSaleSchema>;
