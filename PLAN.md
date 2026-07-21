@@ -23,7 +23,7 @@ Tener de nuevo funcionando el sistema de gestión de la financiera (descuento de
 ### Continuar en otra sesión / otra computadora (handoff)
 En **otra computadora** el contexto viaja SOLO por el repo (este `PLAN.md`) — las memorias quedan en la máquina original. Este PLAN es autosuficiente. Pegá este prompt en la sesión nueva:
 
-> Estoy reviviendo un sistema de gestión de una financiera. Repo: https://github.com/matiaslujanw/financiera-digital (cloná si hace falta). La app está en `financiera/` (Next.js). Setup: `cd financiera && npm install`, después `npm run dev` (levanta pg-server en :5433 + Next en :3000). **Antes de programar, leé `PLAN.md` en la raíz de punta a punta** — tiene el roadmap, el estado, las decisiones técnicas y las "Preguntas abiertas — Fase 2". Estado: Fases 0 y 1 completas (auth + negocio + dashboard + transacción regular con balances). Seguimos con la **Fase 2 (cheques)**: primero respondé conmigo las "Preguntas abiertas — Fase 2" del PLAN antes de implementar las fórmulas de compra/venta. La base local arranca vacía en una compu nueva (registrá un negocio en `/register`).
+> Estoy reviviendo un sistema de gestión de una financiera. Repo: https://github.com/matiaslujanw/financiera-digital (cloná si hace falta). La app está en `financiera/` (Next.js). Setup: `cd financiera && npm install`, después `npm run dev` (levanta pg-server en :5433 + Next en :3000). **Antes de programar, leé `PLAN.md` en la raíz de punta a punta** — tiene el roadmap, el estado, las decisiones técnicas y la Fase 2. Estado: Fases 0 y 1 completas (auth + negocio + dashboard + transacción regular con balances). Seguimos con la **Fase 2 (cheques): COMPRA de cheques**. Las fórmulas ya están confirmadas en el PLAN (sección "Fórmulas confirmadas"): implementá según eso, apoyándote en los archivos de referencia `transaction.ts` (`createMultiple`), `special.tsx` y `create.tsx`. La base local arranca vacía en una compu nueva (registrá un negocio en `/register`). Empezá mostrándome un plan corto de cómo vas a portar la compra de cheques antes de codear.
 
 ---
 
@@ -82,18 +82,29 @@ Referencia: `special.tsx`, `create.tsx`, `transaction.ts` (`createMultiple`), `l
 
 > **Dominio (confirmado con el usuario):** *Cartera de cheques* = monto total **neto** de cheques en poder. *Pesificación* e *interés* = tasas que se aplican al comprar/vender para ganar el spread (se compra con descuento, se vende capturando la diferencia).
 
-#### ⚠️ Preguntas abiertas — responder ANTES de implementar (el fuente de las fórmulas NO está)
-Datos observados en las capturas (`compra-cheque.jpeg`, `venta-cheque.jpeg`, `logica-venta-cheque.jpeg`): columnas *Cant. días · C. bancario · Días totales · Interés corrido · Monto interés · Monto pesificación · Valor neto*. En una venta con pesificación 3% e interés 4%: `Total Pesificación = 3% × bruto` (114.300 = 3% de 3.810.000 ✓) y `Total Desagio = Total Interés − Total Pesificación`. Falta confirmar:
+#### ✅ Fórmulas confirmadas por el usuario (2026-07-21) — usar estas
+`bruto` (grossValue) = **valor nominal escrito en el cheque de papel**.
 
-1. **Días:** ¿"Días totales" = días desde la fecha de operación hasta `collectionDate` **+** `bankClearing` (días de clearing)? ¿O sin clearing?
-2. **Interés corrido:** dado el interés mensual %, ¿cómo se prorratea por día? ¿`interésCorrido = bruto × (tasaMensual/30) × díasTotales`? ¿Simple o compuesto?
-3. **Pesificación:** ¿`pesificación = bruto × tasaPesificación%`, plana (no depende de días)? (parece que sí)
-4. **Valor neto:** ¿`neto = bruto − pesificación − interésCorrido`? Confirmar relación exacta entre bruto, pesificación, interés, **desagio** y neto.
-5. **Las 4 transacciones por cheque** (la UI de compra dice "se crearán 4 transacciones por cheque"): ¿cuáles son y contra qué cuentas? (hipótesis: Cartera de cheques +neto, Efectivo −neto, Pesificación +, Intereses cobrados +). Confirmar.
-6. **Compra vs venta:** al comprar, ¿se paga el neto y el cheque entra a Cartera por su neto? Al vender, ¿mismo cálculo con tasas de venta y la ganancia = diferencia? ¿Se registra contra las cuentas REVENUE *Pesificación* e *Intereses cobrados*?
+```
+díasTotales   = díasEntre(purchaseDate → collectionDate) + bankClearing   // se suma el clearing
+pesificación  = bruto × (serviceFeeRate / 100)                            // plana, no depende de días
+interésCorrido = bruto × (monthlyInterestRate / 100 / 30) × díasTotales    // interés SIMPLE (prorrateo diario)
+neto          = bruto − pesificación − interésCorrido                      // (netValue)
+```
+Verificación con la captura (pesif. 3%): `pesificación = 3% × bruto` ✓. Nota: `desagio = interésCorrido − pesificación` es solo un valor mostrado en la UI de venta.
 
-- [ ] **(0)** Responder las preguntas de arriba con el usuario
-- [ ] Portar `calculatePurchaseValues` / `calculateSaleValues` (pesificación, interés mensual, interés corrido, desagio, valor neto)
+**Las 4 transacciones por cheque (COMPRA) — confirmado:**
+1. **Cartera de cheques** (ASSET) **+ neto**  (el cheque entra a la cartera por su neto)
+2. **Efectivo** (ASSET) **− neto**  (lo que la financiera paga)
+3. **Pesificación** (REVENUE) **+ pesificación**
+4. **Intereses cobrados** (REVENUE) **+ interésCorrido**
+
+Todo se agrupa en un `TransactionGroup` con `operationType = CHECK_PURCHASE`, y se crea el registro en `Check` (status `PURCHASED`).
+
+**VENTA** (a confirmar el detalle al implementar): mismo cálculo con las tasas de venta (`saleServiceFeeRate`, `saleMonthlyInterestRate`); el cheque pasa a status `SOLD`; la ganancia es el spread entre neto de compra y de venta. Revisar `transaction.ts createMultiple` + `special.tsx` para el desglose exacto de transacciones de venta.
+
+- [x] **(0)** Preguntas de fórmulas respondidas por el usuario ✔
+- [ ] Portar `calculatePurchaseValues` / `calculateSaleValues` a `server/api/lib/financial-utils` (usando las fórmulas de arriba)
 - [ ] **Compra de cheques:** alta de uno o varios cheques → crea las transacciones por cheque + un `TransactionGroup` (operationType `CHECK_PURCHASE`). Cheque queda `PURCHASED`
 - [ ] UI compra: formulario con pesificación %, interés mensual %, cliente, fecha; filas de cheque (fecha cobro, clearing, monto, librador, N°, banco); totales en vivo
 - [ ] **Venta de cheques:** selección de cheques disponibles, cálculo de neto/interés/desagio, `TransactionGroup` `CHECK_SALE`. Cheque queda `SOLD`
