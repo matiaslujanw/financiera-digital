@@ -14,7 +14,7 @@ import { useTRPC } from "~/trpc/react";
 import {
 	ACCOUNT_TYPE_LABELS,
 	ACCOUNT_TYPE_ORDER,
-	formatPrice,
+	formatCurrency,
 	getTypeLabel,
 } from "~/utils/format";
 import { dayjs } from "~/utils/dayjs";
@@ -31,6 +31,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "~/components/ui/table";
+import { CreateAccountDialog } from "./create-account-dialog";
 
 export function AccountsWorkspace({ guildSlug }: { guildSlug: string }) {
 	const trpc = useTRPC();
@@ -81,14 +82,20 @@ export function AccountsWorkspace({ guildSlug }: { guildSlug: string }) {
 		<div className="flex min-h-[calc(100vh-4rem)] flex-col gap-4 p-4 lg:flex-row lg:p-6">
 			<aside className="bg-card flex w-full shrink-0 flex-col overflow-hidden rounded-xl border lg:w-80">
 				<div className="border-b p-4">
-					<div className="mb-3 flex items-center gap-2">
-						<BookOpen className="size-5" />
-						<div>
-							<h1 className="font-semibold">Cuentas</h1>
-							<p className="text-muted-foreground text-xs">
-								Saldos y movimientos reales
-							</p>
+					<div className="mb-3 flex items-center justify-between gap-2">
+						<div className="flex items-center gap-2">
+							<BookOpen className="size-5" />
+							<div>
+								<h1 className="font-semibold">Cuentas</h1>
+								<p className="text-muted-foreground text-xs">
+									Saldos y movimientos reales
+								</p>
+							</div>
 						</div>
+						<CreateAccountDialog
+							guildSlug={guildSlug}
+							onCreated={setSelectedByUser}
+						/>
 					</div>
 					<div className="relative">
 						<Search className="text-muted-foreground absolute left-3 top-1/2 size-4 -translate-y-1/2" />
@@ -153,7 +160,7 @@ export function AccountsWorkspace({ guildSlug }: { guildSlug: string }) {
 													<div className="min-w-0 flex-1">
 														<p className="truncate text-sm">{item.name}</p>
 														<p className="text-muted-foreground text-xs tabular-nums">
-															{formatPrice(item.currentBalance)} · {item.currency}
+															{formatCurrency(item.currentBalance, item.currency)}
 														</p>
 													</div>
 													<ChevronRight className="text-muted-foreground size-4" />
@@ -189,7 +196,7 @@ export function AccountsWorkspace({ guildSlug }: { guildSlug: string }) {
 									Saldo actual
 								</p>
 								<p className="text-2xl font-semibold tabular-nums">
-									{formatPrice(account.currentBalance)}
+									{formatCurrency(account.currentBalance, account.currency)}
 								</p>
 								<Badge variant="outline">{account.currency}</Badge>
 							</div>
@@ -260,10 +267,10 @@ export function AccountsWorkspace({ guildSlug }: { guildSlug: string }) {
 													)}
 												>
 													{transaction.signedAmount >= 0 ? "+" : "−"}
-													{formatPrice(Math.abs(transaction.signedAmount))}
+													{formatCurrency(Math.abs(transaction.signedAmount), account.currency)}
 												</TableCell>
 												<TableCell className="text-right tabular-nums">
-													{formatPrice(transaction.balanceAfter)}
+													{formatCurrency(transaction.balanceAfter, account.currency)}
 												</TableCell>
 											</TableRow>
 										);

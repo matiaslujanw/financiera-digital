@@ -23,7 +23,7 @@ Tener de nuevo funcionando el sistema de gestión de la financiera (descuento de
 ### Continuar en otra sesión / otra computadora (handoff)
 En **otra computadora** el contexto viaja SOLO por el repo (este `PLAN.md`) — las memorias quedan en la máquina original. Este PLAN es autosuficiente. Pegá este prompt en la sesión nueva:
 
-> Estoy reviviendo un sistema de gestión de una financiera. Repo: https://github.com/matiaslujanw/financiera-digital (cloná si hace falta). La app está en `financiera/` (Next.js). Setup: `cd financiera && npm install`, después `npm run dev` (levanta pg-server en :5433 + Next en :3000). **Antes de programar, leé `PLAN.md` en la raíz de punta a punta** — tiene el roadmap, el estado y las decisiones técnicas. Estado: Fases 0 a 3 completas (auth, negocio, transacciones, ciclo de cheques, navegación, Cuentas y Operaciones). Seguimos con la **Fase 4: préstamos y créditos con cuotas**. La base local arranca vacía en una compu nueva (registrá un negocio en `/register`). Revisá `loan.ts`, `loan.tsx`, `credit.ts` y `credit.tsx` antes de portar el siguiente módulo.
+> Estoy reviviendo un sistema de gestión de una financiera. Repo: https://github.com/matiaslujanw/financiera-digital (cloná si hace falta). La app está en `financiera/` (Next.js). Setup: `cd financiera && npm install`, después `npm run dev` (levanta pg-server en :5433 + Next en :3000). **Antes de programar, leé `PLAN.md` en la raíz de punta a punta** — tiene el roadmap, el estado y las decisiones técnicas. Estado: Fases 0 a 4 completas (auth, negocio, transacciones, ciclo de cheques, navegación, Cuentas, Operaciones, cuentas multimoneda y divisas). Lo próximo a definir es la **Fase 5: préstamos y créditos con cuotas**. La base local arranca vacía en una compu nueva (registrá un negocio en `/register`).
 
 ---
 
@@ -35,12 +35,13 @@ En **otra computadora** el contexto viaja SOLO por el repo (este `PLAN.md`) — 
 | 1 | Transacción regular (movimientos + balances) | ✅ | Crear movimientos entre cuentas y ver balances actualizados |
 | 2 | Cheques (compra / venta) | ✅ | Operaciones especiales y ciclo completo de cheques |
 | 3 | Navegación, Cuentas y Operaciones | ✅ | Sidebar real, mayor por cuenta y operaciones agrupadas |
-| 4 | Préstamos y Créditos (cuotas) | ⬜ | Alta de préstamos/créditos y cobro de cuotas |
-| 5 | Cables y Cambio de divisas | ⬜ | Transferencias con comisión y conversión de moneda |
-| 6 | Entidades y catálogos (personas, subcuentas, categorías) | ⬜ | ABM de clientes, subcuentas y categorías |
-| 7 | Multi-empresa, miembros y permisos | ⬜ | Varias empresas por negocio, invitar miembros, permisos |
-| 8 | Reportes, comprobantes y dashboard | ⬜ | Contadores, comprobante con firma, export CSV |
-| 9 | Pulido y producción | 🧊 | Postgres real, auth robusta, notificaciones, logs |
+| 4 | Cuentas operativas y Divisas | ✅ | Crear cuentas por moneda y cambiar divisas con cotización |
+| 5 | Préstamos y Créditos (cuotas) | ⬜ | Alta de préstamos/créditos y cobro de cuotas |
+| 6 | Cables | ⬜ | Transferencias con comisión |
+| 7 | Entidades y catálogos (personas, subcuentas, categorías) | ⬜ | ABM de clientes, subcuentas y categorías |
+| 8 | Multi-empresa, miembros y permisos | ⬜ | Varias empresas por negocio, invitar miembros, permisos |
+| 9 | Reportes, comprobantes y dashboard | ⬜ | Contadores, comprobante con firma, export CSV |
+| 10 | Pulido y producción | 🧊 | Postgres real, auth robusta, notificaciones, logs |
 
 ---
 
@@ -146,7 +147,27 @@ Referencia visual: `imagenes/transacciones.jpeg`, `imagenes/pantalla-operaciones
 
 ---
 
-## Fase 4 — Préstamos y Créditos (cuotas) ⬜
+## Fase 4 — Cuentas operativas y Divisas ✅
+
+**Meta:** completar el núcleo ya visible antes de sumar módulos nuevos: administrar cuentas reales en distintas monedas y registrar compras/ventas de divisas con doble entrada.
+
+Referencia: `movement/exchange-rate-dialog.tsx`, `transaction.ts` (`exchangeRate`, `CURRENCY_EXCHANGE`) y la pantalla Cuentas de la Fase 3.
+
+- [x] Sidebar de escritorio colapsable sin perder navegación ni estado entre pantallas
+- [x] Alta de cuenta con empresa, nombre, tipo contable y moneda
+- [x] Monedas disponibles: ARS, USD, EUR, BRL, GBP, CHF, JPY, CNY, CAD, AUD, MXN y USDT
+- [x] Las cuentas nuevas aparecen inmediatamente en Cuentas, transacciones y selectores operativos
+- [x] UI **Cambiar divisas**: cuenta de origen, cuenta destino, cantidad y cotización explícita
+- [x] Compra contra pesos: `pesos entregados = divisa comprada × cotización ARS`
+- [x] Venta contra pesos: `pesos recibidos = divisa vendida × cotización ARS`
+- [x] Cruce entre otras monedas: `destino = origen × cotización` mostrando `1 ORIGEN = X DESTINO`
+- [x] Un `TransactionGroup` `CURRENCY_EXCHANGE` con 2 movimientos atómicos y actualización de ambos saldos
+- [x] Operaciones muestra monto origen, monto destino y cotización; Cuentas usa la moneda correcta en saldo y mayor
+- [x] **Verificación:** creada Caja USD; compra de USD 10 a $1.000 y venta de USD 4 a $1.100 registradas correctamente contra Banco
+
+---
+
+## Fase 5 — Préstamos y Créditos (cuotas) ⬜
 
 Referencia: `loan.ts`, `loan.tsx`, `credit.ts`, `credit.tsx`, schema `Loan`/`Credit`/`Installment`.
 
@@ -158,18 +179,16 @@ Referencia: `loan.ts`, `loan.tsx`, `credit.ts`, `credit.tsx`, schema `Loan`/`Cre
 
 ---
 
-## Fase 5 — Cables y Cambio de divisas ⬜
+## Fase 6 — Cables ⬜
 
-Referencia: schema `Cable`, `movement/exchange-rate-dialog.tsx`, `OperationType` `CABLE` / `CURRENCY_EXCHANGE`.
+Referencia: schema `Cable`, `OperationType` `CABLE`.
 
 - [ ] Cable (transferencia) con comisión → transacción + `TransactionGroup` `CABLE`
-- [ ] Cambio de divisas con tipo de cambio (`exchangeRate`) entre cuentas de distinta moneda
-- [ ] UI del diálogo de tipo de cambio
-- [ ] **Verificación:** hacer un cable y un cambio ARS↔USD
+- [ ] **Verificación:** registrar un cable con su comisión
 
 ---
 
-## Fase 6 — Entidades y catálogos ⬜
+## Fase 7 — Entidades y catálogos ⬜
 
 - [ ] Personas (clientes): ABM, usados como contraparte en operaciones
 - [ ] Subcuentas: cuentas con `hasSubAccounts` (Personas/Vehículos/Propiedades/Maquinarias) y su selección (`account-selection-dialog`, `subaccount-selection-dialog`)
@@ -178,7 +197,7 @@ Referencia: schema `Cable`, `movement/exchange-rate-dialog.tsx`, `OperationType`
 
 ---
 
-## Fase 7 — Multi-empresa, miembros y permisos ⬜
+## Fase 8 — Multi-empresa, miembros y permisos ⬜
 
 - [ ] Crear varias empresas (Business) dentro de un negocio
 - [ ] Invitar miembros (Invite) y roles (OWNER / MANAGER / MEMBER)
@@ -187,7 +206,7 @@ Referencia: schema `Cable`, `movement/exchange-rate-dialog.tsx`, `OperationType`
 
 ---
 
-## Fase 8 — Reportes, comprobantes y dashboard ⬜
+## Fase 9 — Reportes, comprobantes y dashboard ⬜
 
 Referencia: dashboard `dashboard.jpeg`, `transaction.ts` (`export`, `getPublicReceipt`, `saveSignature`, `byAccountForPeriod`).
 
@@ -199,7 +218,7 @@ Referencia: dashboard `dashboard.jpeg`, `transaction.ts` (`export`, `getPublicRe
 
 ---
 
-## Fase 9 — Pulido y producción 🧊
+## Fase 10 — Pulido y producción 🧊
 
 - [ ] Opción de Postgres real (Neon/Supabase) cambiando `DATABASE_URL` (hoy PGlite local)
 - [ ] Auth más robusta (Auth.js o Supabase) si hace falta
@@ -276,4 +295,16 @@ utils/        format.ts, dayjs.ts
 - Cuentas muestra saldos y mayor real, reconstruye el saldo histórico y agrega los movimientos de subcuentas en cuentas como Personas.
 - Operaciones pagina y filtra grupos reales; cada detalle expone cheques, compra, venta, ganancia y asientos contables.
 - Verificado en navegador con la PGlite local: 11 grupos; compra múltiple en una fila; Personas = $65.000; F2-001 venta $95.300 y ganancia $4.700. Build, lint y 4 pruebas financieras correctos.
-- **Próximo:** Fase 4, préstamos y créditos con cuotas.
+- La siguiente prioridad pasó a cuentas operativas y divisas antes de abordar préstamos.
+
+### 2026-07-21 — Fase 4 completada: cuentas operativas y divisas
+- Repriorizado el roadmap a pedido del usuario: antes de préstamos se completa la funcionalidad de las pantallas actuales.
+- Alcance acordado: sidebar colapsable, creación de cuentas por tipo/moneda y compra/venta de divisas con cotización visible y doble entrada.
+- El enum existente ya contempla ARS, USD, EUR, BRL, GBP, CHF, JPY, CNY, CAD, AUD, MXN y USDT; no hace falta ampliar el schema para ofrecerlas.
+- Agregada alta de cuentas operativas por empresa, tipo contable y moneda; las cuentas aparecen inmediatamente en el mayor y los selectores.
+- Agregada operación atómica `CURRENCY_EXCHANGE`: un grupo con salida de la cuenta origen, ingreso en la cuenta destino y actualización conjunta de ambos saldos.
+- La UI distingue compra, venta y cruce según las monedas elegidas, muestra la convención de cotización, el monto que sale y el que entra antes de confirmar.
+- Operaciones muestra ambos importes y la cotización; Cuentas formatea saldo y movimientos con la divisa real de cada cuenta.
+- Verificado en navegador sobre PGlite real: sidebar colapsado/expandido; creación de `Caja USD`; compra de USD 10 entregando ARS 10.000 a cotización 1.000; venta de USD 4 recibiendo ARS 4.400 a cotización 1.100. Ambas quedaron agrupadas y visibles en Operaciones.
+- Calidad: 7 pruebas financieras correctas (incluyen compra, venta y cruce de divisas), lint limpio y build de producción correcto.
+- **Próximo:** definir y comenzar la Fase 5, préstamos y créditos con cuotas.

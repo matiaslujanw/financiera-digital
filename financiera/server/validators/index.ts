@@ -69,6 +69,20 @@ export const TransactionCreateSchema = z.object({
 
 export type TransactionCreateInput = z.infer<typeof TransactionCreateSchema>;
 
+export const CurrencyExchangeSchema = z.object({
+	guildSlug: z.string().min(1),
+	businessId: z.string().uuid(),
+	fromAccountId: z.string().uuid(),
+	toAccountId: z.string().uuid(),
+	date: z.coerce.date(),
+	sourceAmount: z.number().positive(),
+	exchangeRate: z.number().positive(),
+	rateDirection: z.enum(["FROM_TO", "TO_FROM"]),
+	about: z.string().trim().max(1_000).optional(),
+});
+
+export type CurrencyExchangeInput = z.infer<typeof CurrencyExchangeSchema>;
+
 export const CheckPurchaseSchema = z
 	.object({
 		guildSlug: z.string().min(1),

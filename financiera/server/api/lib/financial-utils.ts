@@ -22,6 +22,34 @@ export interface PurchaseValues {
 
 export type SaleValues = PurchaseValues;
 
+export type ExchangeRateDirection = "FROM_TO" | "TO_FROM";
+
+/**
+ * Convierte el monto que sale de la cuenta origen al monto de la cuenta destino.
+ *
+ * - FROM_TO: 1 moneda origen = cotización en moneda destino.
+ * - TO_FROM: 1 moneda destino = cotización en moneda origen.
+ */
+export function calculateCurrencyExchange(input: {
+	sourceAmount: number;
+	exchangeRate: number;
+	rateDirection: ExchangeRateDirection;
+}): number {
+	if (!Number.isFinite(input.sourceAmount) || input.sourceAmount <= 0) {
+		throw new RangeError("El monto de origen debe ser mayor a 0");
+	}
+	if (!Number.isFinite(input.exchangeRate) || input.exchangeRate <= 0) {
+		throw new RangeError("La cotización debe ser mayor a 0");
+	}
+
+	const targetAmount =
+		input.rateDirection === "FROM_TO"
+			? input.sourceAmount * input.exchangeRate
+			: input.sourceAmount / input.exchangeRate;
+
+	return round(targetAmount, 8);
+}
+
 /**
  * Calcula el descuento de compra de un cheque.
  *

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { calculatePurchaseValues, calculateSaleValues } from "./financial-utils";
+import {
+	calculateCurrencyExchange,
+	calculatePurchaseValues,
+	calculateSaleValues,
+} from "./financial-utils";
 
 test("calcula pesificación plana e interés simple incluyendo clearing", () => {
 	const result = calculatePurchaseValues({
@@ -70,4 +74,46 @@ test("calcula el valor de venta y permite obtener la ganancia sobre el neto de c
 	assert.equal(sale.interestAmount, 2_700);
 	assert.equal(sale.netValue, 95_300);
 	assert.equal(sale.netValue - 90_600, 4_700);
+});
+
+test("compra moneda extranjera con una cotización expresada en pesos", () => {
+	assert.equal(
+		calculateCurrencyExchange({
+			sourceAmount: 1_450_000,
+			exchangeRate: 1_450,
+			rateDirection: "TO_FROM",
+		}),
+		1_000,
+	);
+});
+
+test("vende moneda extranjera y acredita el equivalente cotizado", () => {
+	assert.equal(
+		calculateCurrencyExchange({
+			sourceAmount: 1_000,
+			exchangeRate: 1_470,
+			rateDirection: "FROM_TO",
+		}),
+		1_470_000,
+	);
+});
+
+test("convierte entre dos monedas extranjeras y rechaza valores inválidos", () => {
+	assert.equal(
+		calculateCurrencyExchange({
+			sourceAmount: 500,
+			exchangeRate: 0.92,
+			rateDirection: "FROM_TO",
+		}),
+		460,
+	);
+	assert.throws(
+		() =>
+			calculateCurrencyExchange({
+				sourceAmount: 500,
+				exchangeRate: 0,
+				rateDirection: "FROM_TO",
+			}),
+		/cotización/i,
+	);
 });

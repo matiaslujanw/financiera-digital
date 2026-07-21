@@ -3,14 +3,111 @@ import { TRPCError } from "@trpc/server";
 import { and, desc, eq, inArray, lt, or } from "drizzle-orm";
 
 import {
+	AccountTypeEnum,
 	AccountOnBusiness,
 	Business,
+	CurrencyEnum,
+	DictionaryAccount,
 	Transaction,
 } from "~/server/db/schema";
+import { slugify } from "~/server/bootstrap";
 import { createTRPCRouter, protectedProcedure } from "../trpc";
 import { assertMembership } from "../lib/guards";
 
 export const accountOnBusinessRouter = createTRPCRouter({
+	create: protectedProcedure
+		.input(
+			z.object({
+				guildSlug: z.string().min(1),
+				businessId: z.string().uuid(),
+				name: z.string().trim().min(2).max(255),
+				accountType: z.enum(AccountTypeEnum.enumValues),
+				currency: z.enum(CurrencyEnum.enumValues),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			await assertMembership(ctx.db, ctx.user.id, input.guildSlug);
+
+			const business = await ctx.db.query.Business.findFirst({
+				where: and(
+					eq(Business.id, input.businessId),
+					eq(Business.guildSlug, input.guildSlug),
+					eq(Business.discharged, true),
+				),
+			});
+			if (!business) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: "Empresa no encontrada",
+				});
+			}
+
+			return ctx.db.transaction(async (tx) => {
+				const currentAccounts = await tx.query.AccountOnBusiness.findMany({
+					where: and(
+						eq(AccountOnBusiness.businessId, business.id),
+						eq(AccountOnBusiness.subAccount, false),
+						eq(AccountOnBusiness.discharged, true),
+					),
+					with: { dictionaryAccount: true },
+				});
+				const normalizedName = input.name.trim().toLocaleLowerCase("es");
+				const duplicate = currentAccounts.some(
+					(account) =>
+						(account.name ?? account.dictionaryAccount.name)
+							.trim()
+							.toLocaleLowerCase("es") === normalizedName &&
+						account.dictionaryAccount.currency === input.currency,
+				);
+				if (duplicate) {
+					throw new TRPCError({
+						code: "CONFLICT",
+						message: `Ya existe una cuenta ${input.name.trim()} en ${input.currency}`,
+					});
+				}
+
+				const [dictionaryAccount] = await tx
+					.insert(DictionaryAccount)
+					.values({
+						name: input.name.trim(),
+						accountType: input.accountType,
+						currency: input.currency,
+						guildSlug: input.guildSlug,
+						slug: slugify(`${input.name}-${input.currency}`),
+						availability: input.accountType === "ASSET",
+						checkAccount: false,
+						hasSubAccounts: false,
+					})
+					.returning();
+				if (!dictionaryAccount) {
+					throw new TRPCError({
+						code: "INTERNAL_SERVER_ERROR",
+						message: "No se pudo crear la definición de cuenta",
+					});
+				}
+
+				const [account] = await tx
+					.insert(AccountOnBusiness)
+					.values({
+						businessId: business.id,
+						dictionaryAccountId: dictionaryAccount.id,
+						currentBalance: "0",
+						subAccount: false,
+					})
+					.returning();
+
+				return {
+					id: account!.id,
+					name: dictionaryAccount.name,
+					accountType: dictionaryAccount.accountType,
+					currency: dictionaryAccount.currency,
+					businessId: business.id,
+					businessName: business.name,
+					currentBalance: account!.currentBalance ?? "0",
+				};
+			});
+		}),
+
 	// Resumen de cuentas del guild: cada Business con sus cuentas (top-level)
 	// y el detalle del plan de cuentas asociado. El cliente agrupa por tipo.
 	guildSummary: protectedProcedure

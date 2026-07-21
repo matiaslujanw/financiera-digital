@@ -8,12 +8,13 @@ import type { RouterOutputs } from "~/server/api";
 import type { OperationType } from "~/server/db/schema";
 import { useTRPC } from "~/trpc/react";
 import { dayjs } from "~/utils/dayjs";
-import { formatPrice, getTypeLabel } from "~/utils/format";
+import { formatCurrency, formatPrice, getTypeLabel } from "~/utils/format";
 import { cn } from "~/lib/utils";
 import { CreateCheckPurchaseDialog } from "./create-check-purchase-dialog";
 import { CreateCheckSaleDialog } from "./create-check-sale-dialog";
 import { CreateTransactionDialog } from "./create-transaction-dialog";
 import { ManageChecksDialog } from "./manage-checks-dialog";
+import { CurrencyExchangeDialog } from "./currency-exchange-dialog";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
@@ -110,6 +111,7 @@ export function OperationsWorkspace({ guildSlug }: { guildSlug: string }) {
 						</p>
 					</div>
 					<div className="flex flex-wrap items-center gap-2">
+						<CurrencyExchangeDialog guildSlug={guildSlug} />
 						<CreateCheckPurchaseDialog guildSlug={guildSlug} />
 						<CreateCheckSaleDialog guildSlug={guildSlug} />
 						<ManageChecksDialog guildSlug={guildSlug} />
@@ -182,7 +184,7 @@ export function OperationsWorkspace({ guildSlug }: { guildSlug: string }) {
 								<TableHead>Tipo</TableHead>
 								<TableHead>Descripción</TableHead>
 								<TableHead className="text-right">Monto</TableHead>
-								<TableHead className="text-right">Descuento / resultado</TableHead>
+								<TableHead className="text-right">Descuento / cotización</TableHead>
 								<TableHead>Empresa</TableHead>
 								<TableHead>Persona</TableHead>
 								<TableHead className="text-right">Detalle</TableHead>
@@ -223,15 +225,30 @@ export function OperationsWorkspace({ guildSlug }: { guildSlug: string }) {
 										</p>
 									</TableCell>
 									<TableCell className="text-right tabular-nums">
-										<p className="font-medium">{formatPrice(operation.amount)}</p>
+										<p className="font-medium">
+											{operation.operationType === "CURRENCY_EXCHANGE"
+												? formatCurrency(operation.amount, operation.currency)
+												: formatPrice(operation.amount)}
+										</p>
 										{operation.secondaryAmount !== null && (
 											<p className="text-muted-foreground text-xs">
-												{operation.secondaryLabel}: {formatPrice(operation.secondaryAmount)}
+												{operation.secondaryLabel}:{" "}
+												{operation.operationType === "CURRENCY_EXCHANGE"
+													? formatCurrency(
+															operation.secondaryAmount,
+															operation.secondaryCurrency ?? operation.currency,
+														)
+													: formatPrice(operation.secondaryAmount)}
 											</p>
 										)}
 									</TableCell>
 									<TableCell className="text-right tabular-nums">
-										{operation.metricAmount !== null ? (
+										{operation.metricText ? (
+											<>
+												<p className="font-medium">{operation.metricText}</p>
+												<p className="text-muted-foreground text-xs">{operation.metricLabel}</p>
+											</>
+										) : operation.metricAmount !== null ? (
 											<>
 												<p
 													className={cn(
@@ -284,7 +301,9 @@ function OperationBadge({ type }: { type: OperationType }) {
 				? "border-rose-500/30 bg-rose-500/10 text-rose-500"
 				: type === "CHECK_PURCHASE"
 					? "border-sky-500/30 bg-sky-500/10 text-sky-500"
-					: "";
+					: type === "CURRENCY_EXCHANGE"
+						? "border-amber-500/30 bg-amber-500/10 text-amber-500"
+						: "";
 	return (
 		<Badge variant="outline" className={className}>
 			{getTypeLabel(type)}
@@ -314,15 +333,29 @@ function OperationDetail({ operation }: { operation: Operation }) {
 				</DialogHeader>
 
 				<div className="grid gap-3 sm:grid-cols-3">
-					<Metric label="Monto de la operación" value={operation.amount} />
+					<Metric
+						label="Monto de la operación"
+						value={operation.amount}
+						currency={
+							operation.operationType === "CURRENCY_EXCHANGE"
+								? operation.currency
+								: undefined
+						}
+					/>
 					<Metric
 						label={operation.secondaryLabel ?? "Moneda"}
 						value={operation.secondaryAmount}
 						fallback={operation.currency}
+						currency={
+							operation.operationType === "CURRENCY_EXCHANGE"
+								? (operation.secondaryCurrency ?? operation.currency)
+								: undefined
+						}
 					/>
 					<Metric
 						label={operation.metricLabel ?? "Resultado"}
 						value={operation.metricAmount}
+						text={operation.metricText}
 						result={operation.metricLabel === "Resultado"}
 					/>
 				</div>
@@ -389,7 +422,7 @@ function OperationDetail({ operation }: { operation: Operation }) {
 							<TableHeader>
 								<TableRow>
 									<TableHead>Cuenta</TableHead>
-									<TableHead>Debe / haber</TableHead>
+								<TableHead>Debe / haber</TableHead>
 									<TableHead>Descripción</TableHead>
 									<TableHead className="text-right">Monto</TableHead>
 									<TableHead className="text-right">Saldo posterior</TableHead>
@@ -406,8 +439,18 @@ function OperationDetail({ operation }: { operation: Operation }) {
 											<Badge variant="outline">{transaction.transactionType === "DEBIT" ? "Debe" : "Haber"}</Badge>
 										</TableCell>
 										<TableCell className="max-w-xs truncate">{transaction.about ?? "—"}</TableCell>
-										<TableCell className="text-right tabular-nums">{formatPrice(transaction.amount)}</TableCell>
-										<TableCell className="text-right tabular-nums">{formatPrice(transaction.balance)}</TableCell>
+										<TableCell className="text-right tabular-nums">
+											{formatCurrency(
+												transaction.amount,
+												transaction.toAccount.dictionaryAccount.currency,
+											)}
+										</TableCell>
+										<TableCell className="text-right tabular-nums">
+											{formatCurrency(
+												transaction.balance,
+												transaction.toAccount.dictionaryAccount.currency,
+											)}
+										</TableCell>
 									</TableRow>
 								))}
 							</TableBody>
@@ -423,6 +466,8 @@ function Metric(props: {
 	label: string;
 	value: number | null;
 	fallback?: string;
+	currency?: string;
+	text?: string | null;
 	result?: boolean;
 }) {
 	return (
@@ -435,7 +480,12 @@ function Metric(props: {
 						(props.value >= 0 ? "text-emerald-500" : "text-rose-500"),
 				)}
 			>
-				{props.value !== null ? formatPrice(props.value) : (props.fallback ?? "—")}
+				{props.text ??
+					(props.value !== null
+						? props.currency
+							? formatCurrency(props.value, props.currency)
+							: formatPrice(props.value)
+						: (props.fallback ?? "—"))}
 			</p>
 		</div>
 	);

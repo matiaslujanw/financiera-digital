@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, inArray, lt } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, sql } from "drizzle-orm";
 
 import {
 	AccountOnBusiness,
@@ -10,10 +10,14 @@ import {
 	Transaction,
 	TransactionGroup,
 } from "~/server/db/schema";
-import { TransactionCreateSchema } from "~/server/validators";
+import {
+	CurrencyExchangeSchema,
+	TransactionCreateSchema,
+} from "~/server/validators";
 import { createTRPCRouter, protectedProcedure } from "../trpc";
 import { assertMembership } from "../lib/guards";
 import { dayjs } from "../lib/dayjs";
+import { calculateCurrencyExchange } from "../lib/financial-utils";
 import {
 	combineDateWithCurrentTime,
 	convertAmount,
@@ -44,6 +48,10 @@ function calculateNewBalance(
 		return transactionType === "DEBIT" ? oldBalance + amount : oldBalance - amount;
 	}
 	return transactionType === "CREDIT" ? oldBalance + amount : oldBalance - amount;
+}
+
+function decimalForStorage(value: number): string {
+	return value.toFixed(8).replace(/\.?0+$/, "") || "0";
 }
 
 /** IDs de las cuentas (top-level y subcuentas) de todos los negocios del guild. */
@@ -500,6 +508,190 @@ export const transactionRouter = createTRPCRouter({
 			}
 
 			return created;
+		}),
+
+	exchangeCurrency: protectedProcedure
+		.input(CurrencyExchangeSchema)
+		.mutation(async ({ ctx, input }) => {
+			const member = await assertMembership(
+				ctx.db,
+				ctx.user.id,
+				input.guildSlug,
+			);
+			if (input.fromAccountId === input.toAccountId) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "Las cuentas de origen y destino deben ser distintas",
+				});
+			}
+
+			return ctx.db.transaction(async (tx) => {
+				await tx.execute(
+					sql`select id from ${AccountOnBusiness} where ${AccountOnBusiness.id} = ${input.fromAccountId} for update`,
+				);
+				await tx.execute(
+					sql`select id from ${AccountOnBusiness} where ${AccountOnBusiness.id} = ${input.toAccountId} for update`,
+				);
+
+				const fromAccount = await tx.query.AccountOnBusiness.findFirst({
+					where: and(
+						eq(AccountOnBusiness.id, input.fromAccountId),
+						eq(AccountOnBusiness.discharged, true),
+					),
+					with: { dictionaryAccount: true, business: true },
+				});
+				const toAccount = await tx.query.AccountOnBusiness.findFirst({
+					where: and(
+						eq(AccountOnBusiness.id, input.toAccountId),
+						eq(AccountOnBusiness.discharged, true),
+					),
+					with: { dictionaryAccount: true, business: true },
+				});
+
+				if (!fromAccount || !toAccount) {
+					throw new TRPCError({
+						code: "NOT_FOUND",
+						message: "No se encontró una de las cuentas seleccionadas",
+					});
+				}
+				if (
+					fromAccount.businessId !== input.businessId ||
+					toAccount.businessId !== input.businessId ||
+					fromAccount.business.guildSlug !== input.guildSlug ||
+					toAccount.business.guildSlug !== input.guildSlug
+				) {
+					throw new TRPCError({
+						code: "FORBIDDEN",
+						message: "Las cuentas deben pertenecer a la empresa seleccionada",
+					});
+				}
+				if (fromAccount.subAccount || toAccount.subAccount) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: "El cambio de divisas opera únicamente con cuentas principales",
+					});
+				}
+				if (
+					fromAccount.dictionaryAccount.accountType !== "ASSET" ||
+					toAccount.dictionaryAccount.accountType !== "ASSET"
+				) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: "El cambio de divisas requiere dos cuentas de Activo",
+					});
+				}
+
+				const fromCurrency = fromAccount.dictionaryAccount.currency;
+				const toCurrency = toAccount.dictionaryAccount.currency;
+				if (fromCurrency === toCurrency) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: "Elegí cuentas de monedas diferentes",
+					});
+				}
+
+				const targetAmount = calculateCurrencyExchange(input);
+				if (!Number.isFinite(targetAmount) || targetAmount <= 0) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: "La cotización produce un monto de destino inválido",
+					});
+				}
+
+				const sourceBalance =
+					Number.parseFloat(fromAccount.currentBalance ?? "0") -
+					input.sourceAmount;
+				const targetBalance =
+					Number.parseFloat(toAccount.currentBalance ?? "0") + targetAmount;
+				const operationDate = combineDateWithCurrentTime(input.date, false);
+				const operationName =
+					fromCurrency === "ARS"
+						? `Compra de ${toCurrency}`
+						: toCurrency === "ARS"
+							? `Venta de ${fromCurrency}`
+							: `Cambio de ${fromCurrency} a ${toCurrency}`;
+				const quote =
+					input.rateDirection === "FROM_TO"
+						? `1 ${fromCurrency} = ${decimalForStorage(input.exchangeRate)} ${toCurrency}`
+						: `1 ${toCurrency} = ${decimalForStorage(input.exchangeRate)} ${fromCurrency}`;
+
+				const [group] = await tx
+					.insert(TransactionGroup)
+					.values({
+						guildSlug: input.guildSlug,
+						businessId: input.businessId,
+						name: operationName,
+						description: input.about || quote,
+						operationType: "CURRENCY_EXCHANGE",
+					})
+					.returning();
+				if (!group) {
+					throw new TRPCError({
+						code: "INTERNAL_SERVER_ERROR",
+						message: "No se pudo crear la operación de cambio",
+					});
+				}
+
+				const exchangeRate = decimalForStorage(input.exchangeRate);
+				const sourceAmount = decimalForStorage(input.sourceAmount);
+				const destinationAmount = decimalForStorage(targetAmount);
+				const transactions = await tx
+					.insert(Transaction)
+					.values([
+						{
+							date: operationDate,
+							amount: sourceAmount,
+							balance: decimalForStorage(sourceBalance),
+							exchangeRate,
+							transactionType: "CREDIT",
+							toAccountId: fromAccount.id,
+							memberId: member.id,
+							transactionGroupId: group.id,
+							about: `Salida por ${operationName.toLocaleLowerCase("es")}`,
+						},
+						{
+							date: operationDate,
+							amount: destinationAmount,
+							balance: decimalForStorage(targetBalance),
+							exchangeRate,
+							transactionType: "DEBIT",
+							toAccountId: toAccount.id,
+							fromAccountId: fromAccount.id,
+							memberId: member.id,
+							transactionGroupId: group.id,
+							about: `Ingreso por ${operationName.toLocaleLowerCase("es")}`,
+						},
+					])
+					.returning();
+
+				await tx
+					.update(AccountOnBusiness)
+					.set({
+						currentBalance: decimalForStorage(sourceBalance),
+						lastTransactionDate: operationDate,
+						updatedAt: new Date(),
+					})
+					.where(eq(AccountOnBusiness.id, fromAccount.id));
+				await tx
+					.update(AccountOnBusiness)
+					.set({
+						currentBalance: decimalForStorage(targetBalance),
+						lastTransactionDate: operationDate,
+						updatedAt: new Date(),
+					})
+					.where(eq(AccountOnBusiness.id, toAccount.id));
+
+				return {
+					groupId: group.id,
+					operationName,
+					quote,
+					fromCurrency,
+					toCurrency,
+					sourceAmount,
+					destinationAmount,
+					transactions,
+				};
+			});
 		}),
 
 	countByGuildSlug: protectedProcedure

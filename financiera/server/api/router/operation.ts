@@ -34,6 +34,13 @@ function decimal(value: string | null | undefined): number {
 	return Number.parseFloat(value ?? "0") || 0;
 }
 
+function decimalForDisplay(value: number): string {
+	return new Intl.NumberFormat("es-AR", {
+		minimumFractionDigits: 2,
+		maximumFractionDigits: 8,
+	}).format(value);
+}
+
 export const operationRouter = createTRPCRouter({
 	byGuildSlug: protectedProcedure
 		.input(filtersSchema)
@@ -175,19 +182,27 @@ export const operationRouter = createTRPCRouter({
 				);
 				let secondaryAmount: number | null = null;
 				let secondaryLabel: string | null = null;
+				let secondaryCurrency: string | null = null;
 				let metricAmount: number | null = null;
 				let metricLabel: string | null = null;
+				let metricText: string | null = null;
+				let currency =
+					checks[0]?.currency ??
+					group.transactions[0]?.toAccount.dictionaryAccount.currency ??
+					"ARS";
 
 				if (group.operationType === "CHECK_PURCHASE") {
 					amount = purchaseNetAmount;
 					secondaryAmount = grossAmount;
 					secondaryLabel = "Nominal";
+					secondaryCurrency = currency;
 					metricAmount = purchaseDiscount;
 					metricLabel = "Descuento";
 				} else if (group.operationType === "CHECK_SALE") {
 					amount = saleNetAmount;
 					secondaryAmount = grossAmount;
 					secondaryLabel = "Nominal";
+					secondaryCurrency = currency;
 					metricAmount = saleNetAmount - purchaseNetAmount;
 					metricLabel = "Resultado";
 				} else if (
@@ -195,6 +210,35 @@ export const operationRouter = createTRPCRouter({
 					group.operationType === "CHECK_REJECTION"
 				) {
 					amount = grossAmount;
+				} else if (group.operationType === "CURRENCY_EXCHANGE") {
+					const destinationTransaction = group.transactions.find(
+						(transaction) => transaction.fromAccountId,
+					);
+					const sourceTransaction = destinationTransaction?.fromAccountId
+						? group.transactions.find(
+								(transaction) =>
+									transaction.toAccountId ===
+									destinationTransaction.fromAccountId,
+							)
+						: undefined;
+					if (sourceTransaction && destinationTransaction) {
+						const sourceAmount = decimal(sourceTransaction.amount);
+						const destinationAmount = decimal(destinationTransaction.amount);
+						const sourceCurrency =
+							sourceTransaction.toAccount.dictionaryAccount.currency;
+						const destinationCurrency =
+							destinationTransaction.toAccount.dictionaryAccount.currency;
+						amount = destinationAmount;
+						currency = destinationCurrency;
+						secondaryAmount = sourceAmount;
+						secondaryCurrency = sourceCurrency;
+						secondaryLabel = "Sale";
+						metricLabel = "Cotización";
+						metricText =
+							sourceCurrency === "ARS" && destinationCurrency !== "ARS"
+								? `1 ${destinationCurrency} = ${decimalForDisplay(sourceAmount / destinationAmount)} ${sourceCurrency}`
+								: `1 ${sourceCurrency} = ${decimalForDisplay(destinationAmount / sourceAmount)} ${destinationCurrency}`;
+					}
 				}
 
 				const firstCheck = checks[0];
@@ -212,15 +256,14 @@ export const operationRouter = createTRPCRouter({
 					operationType: group.operationType,
 					businessName: group.business?.name ?? null,
 					counterpart: counterpart ?? null,
-					currency:
-						firstCheck?.currency ??
-						group.transactions[0]?.toAccount.dictionaryAccount.currency ??
-						"ARS",
+					currency,
 					amount,
 					secondaryAmount,
 					secondaryLabel,
+					secondaryCurrency,
 					metricAmount,
 					metricLabel,
+					metricText,
 					purchaseDiscount,
 					saleDiscount,
 					transactions: group.transactions,
