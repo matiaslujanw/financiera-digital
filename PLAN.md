@@ -23,7 +23,7 @@ Tener de nuevo funcionando el sistema de gestión de la financiera (descuento de
 ### Continuar en otra sesión / otra computadora (handoff)
 En **otra computadora** el contexto viaja SOLO por el repo (este `PLAN.md`) — las memorias quedan en la máquina original. Este PLAN es autosuficiente. Pegá este prompt en la sesión nueva:
 
-> Estoy reviviendo un sistema de gestión de una financiera. Repo: https://github.com/matiaslujanw/financiera-digital (cloná si hace falta). La app está en `financiera/` (Next.js). Setup: `cd financiera && npm install`, después `npm run dev` (levanta pg-server en :5433 + Next en :3000). **Antes de programar, leé `PLAN.md` en la raíz de punta a punta** — tiene el roadmap, el estado y las decisiones técnicas. Estado: Fases 0, 1 y 2 completas (auth, negocio, dashboard, transacciones y ciclo de cheques). Seguimos con la **Fase 3: préstamos y créditos con cuotas**. La base local arranca vacía en una compu nueva (registrá un negocio en `/register`). Revisá los archivos de referencia `loan.ts`, `loan.tsx`, `credit.ts` y `credit.tsx`, y mostrame un plan corto antes de codear.
+> Estoy reviviendo un sistema de gestión de una financiera. Repo: https://github.com/matiaslujanw/financiera-digital (cloná si hace falta). La app está en `financiera/` (Next.js). Setup: `cd financiera && npm install`, después `npm run dev` (levanta pg-server en :5433 + Next en :3000). **Antes de programar, leé `PLAN.md` en la raíz de punta a punta** — tiene el roadmap, el estado y las decisiones técnicas. Estado: Fases 0 a 3 completas (auth, negocio, transacciones, ciclo de cheques, navegación, Cuentas y Operaciones). Seguimos con la **Fase 4: préstamos y créditos con cuotas**. La base local arranca vacía en una compu nueva (registrá un negocio en `/register`). Revisá `loan.ts`, `loan.tsx`, `credit.ts` y `credit.tsx` antes de portar el siguiente módulo.
 
 ---
 
@@ -34,12 +34,13 @@ En **otra computadora** el contexto viaja SOLO por el repo (este `PLAN.md`) — 
 | 0 | Cimientos (scaffold, DB, auth, dashboard) | ✅ | La app enciende: login → negocio → dashboard |
 | 1 | Transacción regular (movimientos + balances) | ✅ | Crear movimientos entre cuentas y ver balances actualizados |
 | 2 | Cheques (compra / venta) | ✅ | Operaciones especiales y ciclo completo de cheques |
-| 3 | Préstamos y Créditos (cuotas) | ⬜ | Alta de préstamos/créditos y cobro de cuotas |
-| 4 | Cables y Cambio de divisas | ⬜ | Transferencias con comisión y conversión de moneda |
-| 5 | Entidades y catálogos (personas, subcuentas, categorías) | ⬜ | ABM de clientes, subcuentas y categorías |
-| 6 | Multi-empresa, miembros y permisos | ⬜ | Varias empresas por negocio, invitar miembros, permisos |
-| 7 | Reportes, comprobantes y dashboard | ⬜ | Contadores, comprobante con firma, export CSV |
-| 8 | Pulido y producción | 🧊 | Postgres real, auth robusta, notificaciones, logs |
+| 3 | Navegación, Cuentas y Operaciones | ✅ | Sidebar real, mayor por cuenta y operaciones agrupadas |
+| 4 | Préstamos y Créditos (cuotas) | ⬜ | Alta de préstamos/créditos y cobro de cuotas |
+| 5 | Cables y Cambio de divisas | ⬜ | Transferencias con comisión y conversión de moneda |
+| 6 | Entidades y catálogos (personas, subcuentas, categorías) | ⬜ | ABM de clientes, subcuentas y categorías |
+| 7 | Multi-empresa, miembros y permisos | ⬜ | Varias empresas por negocio, invitar miembros, permisos |
+| 8 | Reportes, comprobantes y dashboard | ⬜ | Contadores, comprobante con firma, export CSV |
+| 9 | Pulido y producción | 🧊 | Postgres real, auth robusta, notificaciones, logs |
 
 ---
 
@@ -125,7 +126,27 @@ Las 4 transacciones por cheque vendido son: **Cartera de cheques −netoCompra**
 
 ---
 
-## Fase 3 — Préstamos y Créditos (cuotas) ⬜
+## Fase 3 — Navegación, Cuentas y Operaciones ✅
+
+**Meta:** pasar de una única pantalla técnica a un sistema navegable. Separar el mayor contable por cuenta de las operaciones comerciales: una operación ocupa una fila y sus asientos se consultan dentro del detalle.
+
+Referencia visual: `imagenes/transacciones.jpeg`, `imagenes/pantalla-operaciones.jpeg`, `imagenes/dashboard.jpeg`; referencia de datos: `transaction.ts` (`byAccountIdWithCursor`, grupos y detalle).
+
+- [x] Sidebar responsive compartido con accesos a Cuentas y Operaciones
+- [x] Pantalla **Cuentas**: buscador/árbol por empresa y tipo, selección de cuenta, saldo actual y moneda
+- [x] Mayor por cuenta con fecha, operación, descripción, contraparte, entrada/salida y saldo posterior
+- [x] Las cuentas agregadas incluyen los movimientos de sus subcuentas
+- [x] Pantalla **Operaciones**: una fila por `TransactionGroup`, no una fila por asiento
+- [x] Filtros por texto, fecha y tipo de operación; paginación sobre datos reales
+- [x] Detalle de operación con cheques vinculados, valores de compra/venta/resultado y todos sus movimientos
+- [x] Mantener las acciones existentes: transacción, compra, venta y seguimiento de cheques
+- [x] **Verificación:** sidebar y vista móvil; mayor de Banco/Cartera/Personas; búsqueda; compra múltiple, venta y rechazo agrupados; venta F2-001 con $95.300 de venta y $4.700 de resultado
+
+> **Datos:** no se usa mock data. Autenticación, negocios, plan de cuentas, personas, cheques, grupos y movimientos se leen/escriben en la PGlite local (`financiera/.pglite`) mediante Drizzle. La DB no se versiona y en otra computadora empieza vacía; el registro solo crea la estructura inicial y el plan de cuentas.
+
+---
+
+## Fase 4 — Préstamos y Créditos (cuotas) ⬜
 
 Referencia: `loan.ts`, `loan.tsx`, `credit.ts`, `credit.tsx`, schema `Loan`/`Credit`/`Installment`.
 
@@ -137,7 +158,7 @@ Referencia: `loan.ts`, `loan.tsx`, `credit.ts`, `credit.tsx`, schema `Loan`/`Cre
 
 ---
 
-## Fase 4 — Cables y Cambio de divisas ⬜
+## Fase 5 — Cables y Cambio de divisas ⬜
 
 Referencia: schema `Cable`, `movement/exchange-rate-dialog.tsx`, `OperationType` `CABLE` / `CURRENCY_EXCHANGE`.
 
@@ -148,7 +169,7 @@ Referencia: schema `Cable`, `movement/exchange-rate-dialog.tsx`, `OperationType`
 
 ---
 
-## Fase 5 — Entidades y catálogos ⬜
+## Fase 6 — Entidades y catálogos ⬜
 
 - [ ] Personas (clientes): ABM, usados como contraparte en operaciones
 - [ ] Subcuentas: cuentas con `hasSubAccounts` (Personas/Vehículos/Propiedades/Maquinarias) y su selección (`account-selection-dialog`, `subaccount-selection-dialog`)
@@ -157,7 +178,7 @@ Referencia: schema `Cable`, `movement/exchange-rate-dialog.tsx`, `OperationType`
 
 ---
 
-## Fase 6 — Multi-empresa, miembros y permisos ⬜
+## Fase 7 — Multi-empresa, miembros y permisos ⬜
 
 - [ ] Crear varias empresas (Business) dentro de un negocio
 - [ ] Invitar miembros (Invite) y roles (OWNER / MANAGER / MEMBER)
@@ -166,7 +187,7 @@ Referencia: schema `Cable`, `movement/exchange-rate-dialog.tsx`, `OperationType`
 
 ---
 
-## Fase 7 — Reportes, comprobantes y dashboard ⬜
+## Fase 8 — Reportes, comprobantes y dashboard ⬜
 
 Referencia: dashboard `dashboard.jpeg`, `transaction.ts` (`export`, `getPublicReceipt`, `saveSignature`, `byAccountForPeriod`).
 
@@ -178,7 +199,7 @@ Referencia: dashboard `dashboard.jpeg`, `transaction.ts` (`export`, `getPublicRe
 
 ---
 
-## Fase 8 — Pulido y producción 🧊
+## Fase 9 — Pulido y producción 🧊
 
 - [ ] Opción de Postgres real (Neon/Supabase) cambiando `DATABASE_URL` (hoy PGlite local)
 - [ ] Auth más robusta (Auth.js o Supabase) si hace falta
@@ -206,7 +227,7 @@ server/
   validators/ (schemas zod — se irá llenando al portar)
   auth.ts, auth-actions.ts, bootstrap.ts
 trpc/         react.tsx (cliente), server.tsx (RSC), query-client.ts
-app/          login, register, dashboard/[guildSlug]/transactions, api/trpc
+app/          login, register, dashboard/[guildSlug]/{accounts,operations}, api/trpc
 components/   ui/ (shadcn), auth/, dashboard/
 utils/        format.ts, dayjs.ts
 ```
@@ -245,4 +266,14 @@ utils/        format.ts, dayjs.ts
 - Un rechazo desde cartera saca el neto de Cartera y registra el nominal por cobrar en la subcuenta del vendedor. Si el cheque ya fue vendido, registra el nominal por cobrar al vendedor y el mismo nominal en Cheques a pagar, vinculado al comprador; no modifica caja automáticamente.
 - Verificado end-to-end y en DB: F2-R01 vendido y luego rechazado ($40.000 a cobrar y $40.000 a pagar), F2-RP01 rechazado desde cartera ($25.000 a cobrar) y F2-D01 depositado en Banco ($30.000 nominal). Cada cierre creó exactamente 2 movimientos y su grupo correspondiente.
 - Corregida la sincronización del input nativo de fecha de compra/cobro detectada durante la prueba visual.
-- **Próximo:** Fase 3, préstamos y créditos con cuotas.
+- El roadmap se repriorizó antes de préstamos para construir primero navegación, Cuentas y Operaciones.
+
+### 2026-07-21 — Fase 3 completada: navegación, Cuentas y Operaciones
+- Repriorizado el roadmap antes de préstamos: primero se separa la navegación del sistema, el mayor por cuenta y el listado de operaciones comerciales agrupadas.
+- Confirmado que la app no usa mocks: los datos visibles salen de la PGlite local; los registros de prueba también quedan persistidos allí y no viajan con Git.
+- Referencias visuales relevadas: `transacciones.jpeg` para el árbol/mayor de cuentas y `pantalla-operaciones.jpeg` para filtros, agrupación y detalle.
+- Agregado sidebar responsive y rutas dedicadas `/accounts` y `/operations`; la ruta vieja `/transactions` redirige a Cuentas.
+- Cuentas muestra saldos y mayor real, reconstruye el saldo histórico y agrega los movimientos de subcuentas en cuentas como Personas.
+- Operaciones pagina y filtra grupos reales; cada detalle expone cheques, compra, venta, ganancia y asientos contables.
+- Verificado en navegador con la PGlite local: 11 grupos; compra múltiple en una fila; Personas = $65.000; F2-001 venta $95.300 y ganancia $4.700. Build, lint y 4 pruebas financieras correctos.
+- **Próximo:** Fase 4, préstamos y créditos con cuotas.
