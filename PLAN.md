@@ -33,7 +33,7 @@ En **otra computadora** el contexto viaja SOLO por el repo (este `PLAN.md`) — 
 |---|------|--------|--------------------|
 | 0 | Cimientos (scaffold, DB, auth, dashboard) | ✅ | La app enciende: login → negocio → dashboard |
 | 1 | Transacción regular (movimientos + balances) | ✅ | Crear movimientos entre cuentas y ver balances actualizados |
-| 2 | Cheques (compra / venta) | ⬜ | Operaciones especiales de cheques con pesificación/interés/desagio |
+| 2 | Cheques (compra / venta) | 🔜 | Operaciones especiales de cheques con pesificación/interés/desagio |
 | 3 | Préstamos y Créditos (cuotas) | ⬜ | Alta de préstamos/créditos y cobro de cuotas |
 | 4 | Cables y Cambio de divisas | ⬜ | Transferencias con comisión y conversión de moneda |
 | 5 | Entidades y catálogos (personas, subcuentas, categorías) | ⬜ | ABM de clientes, subcuentas y categorías |
@@ -74,7 +74,7 @@ Next 16 dev levanta **varios procesos**, y cada uno abría su propia instancia d
 
 ---
 
-## Fase 2 — Cheques (compra / venta) ⬜
+## Fase 2 — Cheques (compra / venta) 🔜
 
 **Meta:** las operaciones especiales de cheques, que son el corazón de la financiera.
 
@@ -104,13 +104,15 @@ Todo se agrupa en un `TransactionGroup` con `operationType = CHECK_PURCHASE`, y 
 **VENTA** (a confirmar el detalle al implementar): mismo cálculo con las tasas de venta (`saleServiceFeeRate`, `saleMonthlyInterestRate`); el cheque pasa a status `SOLD`; la ganancia es el spread entre neto de compra y de venta. Revisar `transaction.ts createMultiple` + `special.tsx` para el desglose exacto de transacciones de venta.
 
 - [x] **(0)** Preguntas de fórmulas respondidas por el usuario ✔
-- [ ] Portar `calculatePurchaseValues` / `calculateSaleValues` a `server/api/lib/financial-utils` (usando las fórmulas de arriba)
-- [ ] **Compra de cheques:** alta de uno o varios cheques → crea las transacciones por cheque + un `TransactionGroup` (operationType `CHECK_PURCHASE`). Cheque queda `PURCHASED`
-- [ ] UI compra: formulario con pesificación %, interés mensual %, cliente, fecha; filas de cheque (fecha cobro, clearing, monto, librador, N°, banco); totales en vivo
+- [x] Portar `calculatePurchaseValues` a `server/api/lib/financial-utils` con las fórmulas confirmadas + pruebas unitarias
+- [ ] Portar `calculateSaleValues` al implementar la venta
+- [x] **Compra de cheques:** alta de uno o varios cheques → crea 4 transacciones por cheque + un `TransactionGroup` (operationType `CHECK_PURCHASE`). Cheque queda `PURCHASED`
+- [x] UI compra: formulario con pesificación %, interés mensual %, cliente, fecha; filas de cheque (fecha cobro, clearing, monto, librador, N°, banco); totales en vivo
 - [ ] **Venta de cheques:** selección de cheques disponibles, cálculo de neto/interés/desagio, `TransactionGroup` `CHECK_SALE`. Cheque queda `SOLD`
 - [ ] UI venta: lista de cheques disponibles con estado (vencido/días), selección múltiple, totales
 - [ ] Estados del cheque (`PURCHASED` / `SOLD` / `DEPOSITED` / `REJECTED`)
 - [ ] **Verificación:** comprar cheques y luego venderlos; ver ganancia y balances
+- [x] **Verificación parcial (compra):** compra simple ($100.000 → neto $90.600) y múltiple (2 cheques → 8 movimientos) comprobadas en navegador/DB; balances, grupo y estado `PURCHASED` correctos
 
 ---
 
@@ -213,3 +215,10 @@ utils/        format.ts, dayjs.ts
 - UI "Nueva transacción" (ingreso/egreso). Verificado: los balances del Resumen se actualizan correctamente.
 - **Refactor de DB** (ver Nota técnica en Fase 1): de PGlite in-process (multi-proceso, con conflictos) a pg-server dedicado por socket + cliente `pg`. Log limpio, sin race ni corrupción.
 - Próximo: **Fase 2** (cheques: compra/venta con pesificación/interés/desagio).
+
+### 2026-07-21 — Fase 2 en curso: compra de cheques completada
+- Portado `calculatePurchaseValues` con pesificación plana, interés simple diario y clearing; cubierto por pruebas unitarias.
+- Agregada mutación atómica `check.purchase`: alta/reutilización rápida de cliente, `Check` en estado `PURCHASED`, vínculo al `TransactionGroup` `CHECK_PURCHASE` y 4 movimientos por cheque con actualización de balances.
+- Agregada UI para uno o varios cheques con empresa, cliente, fecha, tasas, datos bancarios y totales en vivo. Por ahora la compra opera en ARS; monedas se ampliarán en la fase correspondiente.
+- Verificado end-to-end: compra de $100.000 → cartera +$90.600, efectivo −$90.600, pesificación +$3.000 e intereses +$6.400. También se probó una compra de 2 cheques: un solo grupo `CHECK_PURCHASE`, ambos `PURCHASED` y exactamente 8 transacciones.
+- Pendiente de Fase 2: venta de cheques y transiciones restantes de estado.

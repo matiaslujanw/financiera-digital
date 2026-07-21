@@ -6,6 +6,7 @@ import { useTRPC } from "~/trpc/react";
 import { dayjs } from "~/utils/dayjs";
 import { formatPrice, getTypeLabel } from "~/utils/format";
 import { CreateTransactionDialog } from "./create-transaction-dialog";
+import { CreateCheckPurchaseDialog } from "./create-check-purchase-dialog";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -47,7 +48,10 @@ export function TransactionsTable({ guildSlug }: { guildSlug: string }) {
 					<h2 className="font-semibold">Transacciones</h2>
 					<Badge variant="secondary">{countQuery.data ?? 0}</Badge>
 				</div>
-				<CreateTransactionDialog guildSlug={guildSlug} />
+				<div className="flex items-center gap-2">
+					<CreateCheckPurchaseDialog guildSlug={guildSlug} />
+					<CreateTransactionDialog guildSlug={guildSlug} />
+				</div>
 			</div>
 
 			<div className="flex-1 overflow-auto">

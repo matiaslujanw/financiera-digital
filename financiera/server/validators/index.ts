@@ -68,3 +68,51 @@ export const TransactionCreateSchema = z.object({
 });
 
 export type TransactionCreateInput = z.infer<typeof TransactionCreateSchema>;
+
+export const CheckPurchaseSchema = z
+	.object({
+		guildSlug: z.string().min(1),
+		businessId: z.string().uuid(),
+		purchaseDate: z.coerce.date(),
+		serviceFeeRate: z.number().min(0).max(100),
+		monthlyInterestRate: z.number().min(0).max(1_000),
+		customerName: z.string().trim().min(2).max(255),
+		about: z.string().trim().max(1_000).optional(),
+		checks: z
+			.array(
+				z.object({
+					collectionDate: z.coerce.date(),
+					bankClearing: z.number().int().min(0).max(365),
+					grossValue: z.number().positive(),
+					checkWriter: z.string().trim().min(2).max(255),
+					checkNumber: z.string().trim().min(1).max(100),
+					bankName: z.string().trim().min(1).max(255),
+					about: z.string().trim().max(255).optional(),
+				}),
+			)
+			.min(1)
+			.max(50),
+	})
+	.superRefine((value, ctx) => {
+		const purchaseDay = Date.UTC(
+			value.purchaseDate.getFullYear(),
+			value.purchaseDate.getMonth(),
+			value.purchaseDate.getDate(),
+		);
+		value.checks.forEach((check, index) => {
+			const collectionDay = Date.UTC(
+				check.collectionDate.getFullYear(),
+				check.collectionDate.getMonth(),
+				check.collectionDate.getDate(),
+			);
+			if (collectionDay < purchaseDay) {
+				ctx.addIssue({
+					code: z.ZodIssueCode.custom,
+					message: "La fecha de cobro no puede ser anterior a la compra",
+					path: ["checks", index, "collectionDate"],
+				});
+			}
+		});
+	});
+
+export type CheckPurchaseInput = z.infer<typeof CheckPurchaseSchema>;

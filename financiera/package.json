@@ -9,6 +9,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "tsx --test server/api/lib/*.test.ts",
     "db:generate": "drizzle-kit generate",
     "db:server": "node scripts/pg-server.mjs"
   },
