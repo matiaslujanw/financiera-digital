@@ -8,6 +8,7 @@ import { formatPrice, getTypeLabel } from "~/utils/format";
 import { CreateTransactionDialog } from "./create-transaction-dialog";
 import { CreateCheckPurchaseDialog } from "./create-check-purchase-dialog";
 import { CreateCheckSaleDialog } from "./create-check-sale-dialog";
+import { ManageChecksDialog } from "./manage-checks-dialog";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -49,9 +50,10 @@ export function TransactionsTable({ guildSlug }: { guildSlug: string }) {
 					<h2 className="font-semibold">Transacciones</h2>
 					<Badge variant="secondary">{countQuery.data ?? 0}</Badge>
 				</div>
-				<div className="flex items-center gap-2">
+				<div className="flex flex-wrap items-center justify-end gap-2">
 					<CreateCheckPurchaseDialog guildSlug={guildSlug} />
 					<CreateCheckSaleDialog guildSlug={guildSlug} />
+					<ManageChecksDialog guildSlug={guildSlug} />
 					<CreateTransactionDialog guildSlug={guildSlug} />
 				</div>
 			</div>

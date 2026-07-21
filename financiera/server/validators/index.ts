@@ -129,3 +129,24 @@ export const CheckSaleSchema = z.object({
 });
 
 export type CheckSaleInput = z.infer<typeof CheckSaleSchema>;
+
+export const ChecksByBusinessSchema = z.object({
+	guildSlug: z.string().min(1),
+	businessId: z.string().uuid(),
+});
+
+export const CheckDepositSchema = ChecksByBusinessSchema.extend({
+	checkId: z.string().uuid(),
+	depositDate: z.coerce.date(),
+	destinationAccountId: z.string().uuid(),
+	about: z.string().trim().max(1_000).optional(),
+});
+
+export const CheckRejectSchema = ChecksByBusinessSchema.extend({
+	checkId: z.string().uuid(),
+	rejectionDate: z.coerce.date(),
+	reason: z.string().trim().min(2).max(1_000),
+});
+
+export type CheckDepositInput = z.infer<typeof CheckDepositSchema>;
+export type CheckRejectInput = z.infer<typeof CheckRejectSchema>;

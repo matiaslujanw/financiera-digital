@@ -10,7 +10,13 @@ import {
 	Transaction,
 	TransactionGroup,
 } from "~/server/db/schema";
-import { CheckPurchaseSchema, CheckSaleSchema } from "~/server/validators";
+import {
+	CheckDepositSchema,
+	CheckPurchaseSchema,
+	CheckRejectSchema,
+	CheckSaleSchema,
+	ChecksByBusinessSchema,
+} from "~/server/validators";
 import { createTRPCRouter, protectedProcedure } from "../trpc";
 import { calculatePurchaseValues, calculateSaleValues } from "../lib/financial-utils";
 import { assertMembership } from "../lib/guards";
@@ -25,6 +31,37 @@ function normalizeAccountSlug(value: string): string {
 }
 
 export const checkRouter = createTRPCRouter({
+	byBusiness: protectedProcedure
+		.input(ChecksByBusinessSchema)
+		.query(async ({ ctx, input }) => {
+			await assertMembership(ctx.db, ctx.user.id, input.guildSlug);
+			const business = await ctx.db.query.Business.findFirst({
+				where: and(
+					eq(Business.id, input.businessId),
+					eq(Business.guildSlug, input.guildSlug),
+					eq(Business.discharged, true),
+				),
+			});
+			if (!business) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "Empresa no encontrada" });
+			}
+
+			return ctx.db.query.Check.findMany({
+				where: and(
+					eq(Check.guildSlug, input.guildSlug),
+					eq(Check.businessId, input.businessId),
+					eq(Check.discharged, true),
+				),
+				orderBy: [asc(Check.collectionDate), asc(Check.createdAt)],
+				with: {
+					person: true,
+					buyerPerson: true,
+					business: true,
+					depositAccount: { with: { dictionaryAccount: true } },
+				},
+			});
+		}),
+
 	availableForSale: protectedProcedure
 		.input(CheckSaleSchema.pick({ guildSlug: true, businessId: true }))
 		.query(async ({ ctx, input }) => {
@@ -688,6 +725,480 @@ export const checkRouter = createTRPCRouter({
 						profit: money(totalProfit),
 						averageHoldingDays: totalHoldingDays / checks.length,
 					},
+				};
+			});
+		}),
+
+	deposit: protectedProcedure
+		.input(CheckDepositSchema)
+		.mutation(async ({ ctx, input }) => {
+			const member = await assertMembership(ctx.db, ctx.user.id, input.guildSlug);
+
+			return ctx.db.transaction(async (tx) => {
+				const business = await tx.query.Business.findFirst({
+					where: and(
+						eq(Business.id, input.businessId),
+						eq(Business.guildSlug, input.guildSlug),
+						eq(Business.discharged, true),
+					),
+				});
+				if (!business) {
+					throw new TRPCError({ code: "NOT_FOUND", message: "Empresa no encontrada" });
+				}
+
+				await tx
+					.select({ id: AccountOnBusiness.id })
+					.from(AccountOnBusiness)
+					.where(
+						and(
+							eq(AccountOnBusiness.businessId, business.id),
+							eq(AccountOnBusiness.subAccount, false),
+							eq(AccountOnBusiness.discharged, true),
+						),
+					)
+					.for("update");
+
+				const check = (
+					await tx
+						.select()
+						.from(Check)
+						.where(
+							and(
+								eq(Check.id, input.checkId),
+								eq(Check.guildSlug, input.guildSlug),
+								eq(Check.businessId, business.id),
+								eq(Check.discharged, true),
+							),
+						)
+						.for("update")
+				)[0];
+				if (!check) {
+					throw new TRPCError({ code: "NOT_FOUND", message: "Cheque no encontrado" });
+				}
+				if (check.status !== "PURCHASED") {
+					throw new TRPCError({
+						code: "CONFLICT",
+						message: "Solo se pueden depositar cheques que siguen en cartera",
+					});
+				}
+
+				const now = dayjs();
+				const depositDate = dayjs(input.depositDate)
+					.hour(now.hour())
+					.minute(now.minute())
+					.second(now.second())
+					.millisecond(now.millisecond())
+					.toDate();
+				if (
+					dayjs(depositDate)
+						.startOf("day")
+						.isBefore(dayjs(check.collectionDate).startOf("day"))
+				) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: "El cheque todavía no llegó a su fecha de cobro",
+					});
+				}
+
+				const destinationAccount = await tx.query.AccountOnBusiness.findFirst({
+					where: and(
+						eq(AccountOnBusiness.id, input.destinationAccountId),
+						eq(AccountOnBusiness.businessId, business.id),
+						eq(AccountOnBusiness.subAccount, false),
+						eq(AccountOnBusiness.discharged, true),
+					),
+					with: { dictionaryAccount: true },
+				});
+				if (
+					!destinationAccount?.dictionaryAccount?.availability ||
+					destinationAccount.dictionaryAccount.currency !== check.currency
+				) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: "La cuenta de depósito no es válida para la moneda del cheque",
+					});
+				}
+
+				const accounts = await tx.query.AccountOnBusiness.findMany({
+					where: and(
+						eq(AccountOnBusiness.businessId, business.id),
+						eq(AccountOnBusiness.subAccount, false),
+						eq(AccountOnBusiness.discharged, true),
+					),
+					with: { dictionaryAccount: true },
+				});
+				const walletAccount = accounts.find(
+					(account) =>
+						account.dictionaryAccount?.checkAccount &&
+						account.dictionaryAccount.currency === check.currency,
+				);
+				if (!walletAccount) {
+					throw new TRPCError({
+						code: "PRECONDITION_FAILED",
+						message: "Falta la cuenta Cartera de cheques",
+					});
+				}
+
+				const group = (
+					await tx
+						.insert(TransactionGroup)
+						.values({
+							guildSlug: input.guildSlug,
+							businessId: business.id,
+							name: `Depósito de cheque ${check.checkNumber || "sin número"}`,
+							description: input.about || "Cobro de cheque en cartera",
+							operationType: "CHECK_DEPOSIT",
+						})
+						.returning()
+				)[0];
+				if (!group) {
+					throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "No se pudo crear el grupo" });
+				}
+
+				const purchaseCost = Number.parseFloat(check.netValue);
+				const grossValue = Number.parseFloat(check.grossValue);
+				const walletBalance =
+					(Number.parseFloat(walletAccount.currentBalance ?? "0") || 0) - purchaseCost;
+				const destinationBalance =
+					(Number.parseFloat(destinationAccount.currentBalance ?? "0") || 0) + grossValue;
+				const suffix = check.checkNumber ? ` ${check.checkNumber}` : "";
+
+				await tx.insert(Transaction).values([
+					{
+						date: depositDate,
+						amount: money(purchaseCost),
+						balance: money(walletBalance),
+						transactionType: "CREDIT",
+						toAccountId: walletAccount.id,
+						memberId: member.id,
+						personId: check.personId,
+						transactionGroupId: group.id,
+						about: `Salida de cartera por depósito de cheque${suffix}`,
+					},
+					{
+						date: new Date(depositDate.getTime() + 1),
+						amount: money(grossValue),
+						balance: money(destinationBalance),
+						transactionType: "DEBIT",
+						toAccountId: destinationAccount.id,
+						memberId: member.id,
+						personId: check.personId,
+						transactionGroupId: group.id,
+						about: `Cobro nominal por depósito de cheque${suffix}`,
+					},
+				]);
+				await tx.insert(CheckOnTransactionGroup).values({
+					checkId: check.id,
+					transactionGroupId: group.id,
+				});
+				await tx
+					.update(Check)
+					.set({
+						status: "DEPOSITED",
+						depositDate,
+						depositAccountId: destinationAccount.id,
+						updatedAt: new Date(),
+					})
+					.where(eq(Check.id, check.id));
+				await tx
+					.update(AccountOnBusiness)
+					.set({ currentBalance: money(walletBalance), lastTransactionDate: depositDate, updatedAt: new Date() })
+					.where(eq(AccountOnBusiness.id, walletAccount.id));
+				await tx
+					.update(AccountOnBusiness)
+					.set({ currentBalance: money(destinationBalance), lastTransactionDate: depositDate, updatedAt: new Date() })
+					.where(eq(AccountOnBusiness.id, destinationAccount.id));
+
+				return {
+					checkId: check.id,
+					status: "DEPOSITED" as const,
+					transactionGroupId: group.id,
+					purchaseCost: money(purchaseCost),
+					grossValue: money(grossValue),
+					destination: destinationAccount.name ?? destinationAccount.dictionaryAccount.name,
+				};
+			});
+		}),
+
+	reject: protectedProcedure
+		.input(CheckRejectSchema)
+		.mutation(async ({ ctx, input }) => {
+			const member = await assertMembership(ctx.db, ctx.user.id, input.guildSlug);
+
+			return ctx.db.transaction(async (tx) => {
+				const business = await tx.query.Business.findFirst({
+					where: and(
+						eq(Business.id, input.businessId),
+						eq(Business.guildSlug, input.guildSlug),
+						eq(Business.discharged, true),
+					),
+				});
+				if (!business) {
+					throw new TRPCError({ code: "NOT_FOUND", message: "Empresa no encontrada" });
+				}
+
+				await tx
+					.select({ id: AccountOnBusiness.id })
+					.from(AccountOnBusiness)
+					.where(
+						and(
+							eq(AccountOnBusiness.businessId, business.id),
+							eq(AccountOnBusiness.subAccount, false),
+							eq(AccountOnBusiness.discharged, true),
+						),
+					)
+					.for("update");
+				const check = (
+					await tx
+						.select()
+						.from(Check)
+						.where(
+							and(
+								eq(Check.id, input.checkId),
+								eq(Check.guildSlug, input.guildSlug),
+								eq(Check.businessId, business.id),
+								eq(Check.discharged, true),
+							),
+						)
+						.for("update")
+				)[0];
+				if (!check) {
+					throw new TRPCError({ code: "NOT_FOUND", message: "Cheque no encontrado" });
+				}
+				if (check.status !== "PURCHASED" && check.status !== "SOLD") {
+					throw new TRPCError({
+						code: "CONFLICT",
+						message: "El cheque ya no admite registrar un rechazo",
+					});
+				}
+				if (!check.personId) {
+					throw new TRPCError({
+						code: "PRECONDITION_FAILED",
+						message: "El cheque no tiene vendedor original para reclamar",
+					});
+				}
+
+				const seller = await tx.query.Person.findFirst({ where: eq(Person.id, check.personId) });
+				const buyer = check.buyerPersonId
+					? await tx.query.Person.findFirst({ where: eq(Person.id, check.buyerPersonId) })
+					: null;
+				if (!seller || (check.status === "SOLD" && !buyer)) {
+					throw new TRPCError({
+						code: "PRECONDITION_FAILED",
+						message: "No se pudieron resolver las personas vinculadas al cheque",
+					});
+				}
+
+				const now = dayjs();
+				const rejectionDate = dayjs(input.rejectionDate)
+					.hour(now.hour())
+					.minute(now.minute())
+					.second(now.second())
+					.millisecond(now.millisecond())
+					.toDate();
+				if (
+					dayjs(rejectionDate)
+						.startOf("day")
+						.isBefore(dayjs(check.collectionDate).startOf("day"))
+				) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: "El rechazo no puede ser anterior a la fecha de cobro",
+					});
+				}
+				if (
+					check.status === "SOLD" &&
+					check.saleDate &&
+					dayjs(rejectionDate)
+						.startOf("day")
+						.isBefore(dayjs(check.saleDate).startOf("day"))
+				) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: "El rechazo no puede ser anterior a la venta",
+					});
+				}
+
+				const topAccounts = await tx.query.AccountOnBusiness.findMany({
+					where: and(
+						eq(AccountOnBusiness.businessId, business.id),
+						eq(AccountOnBusiness.subAccount, false),
+						eq(AccountOnBusiness.discharged, true),
+					),
+					with: { dictionaryAccount: true },
+				});
+				const currencyAccounts = topAccounts.filter(
+					(account) => account.dictionaryAccount?.currency === check.currency,
+				);
+				const walletAccount = currencyAccounts.find(
+					(account) => account.dictionaryAccount?.checkAccount,
+				);
+				const peopleAccount = currencyAccounts.find(
+					(account) =>
+						normalizeAccountSlug(account.dictionaryAccount!.slug) === "personas",
+				);
+				const checksPayableAccount = currencyAccounts.find(
+					(account) =>
+						normalizeAccountSlug(account.dictionaryAccount!.slug) === "chequesapagar",
+				);
+				if (!peopleAccount || (check.status === "PURCHASED" && !walletAccount)) {
+					throw new TRPCError({
+						code: "PRECONDITION_FAILED",
+						message: "Faltan las cuentas Personas o Cartera de cheques",
+					});
+				}
+				if (check.status === "SOLD" && !checksPayableAccount) {
+					throw new TRPCError({
+						code: "PRECONDITION_FAILED",
+						message: "Falta la cuenta Cheques a pagar",
+					});
+				}
+
+				let sellerReceivable = await tx.query.AccountOnBusiness.findFirst({
+					where: and(
+						eq(AccountOnBusiness.businessId, business.id),
+						eq(AccountOnBusiness.dictionaryAccountId, peopleAccount.dictionaryAccountId),
+						eq(AccountOnBusiness.subAccount, true),
+						eq(AccountOnBusiness.personId, seller.id),
+						eq(AccountOnBusiness.discharged, true),
+					),
+				});
+				if (!sellerReceivable) {
+					sellerReceivable = (
+						await tx
+							.insert(AccountOnBusiness)
+							.values({
+								businessId: business.id,
+								dictionaryAccountId: peopleAccount.dictionaryAccountId,
+								name: seller.name,
+								subAccount: true,
+								personId: seller.id,
+							})
+							.returning()
+					)[0];
+				}
+				if (!sellerReceivable) {
+					throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "No se pudo crear la cuenta del vendedor" });
+				}
+
+				const originalStatus = check.status;
+				const grossValue = Number.parseFloat(check.grossValue);
+				const purchaseCost = Number.parseFloat(check.netValue);
+				const receivableBalance =
+					(Number.parseFloat(sellerReceivable.currentBalance ?? "0") || 0) + grossValue;
+				const group = (
+					await tx
+						.insert(TransactionGroup)
+						.values({
+							guildSlug: input.guildSlug,
+							businessId: business.id,
+							name: `Rechazo de cheque ${check.checkNumber || "sin número"}`,
+							description: `${input.reason} · Reclamar a ${seller.name}`,
+							operationType: "CHECK_REJECTION",
+						})
+						.returning()
+				)[0];
+				if (!group) {
+					throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "No se pudo crear el grupo" });
+				}
+
+				const rows: (typeof Transaction.$inferInsert)[] = [
+					{
+						date: rejectionDate,
+						amount: money(grossValue),
+						balance: money(receivableBalance),
+						transactionType: "DEBIT",
+						toAccountId: sellerReceivable.id,
+						memberId: member.id,
+						personId: seller.id,
+						transactionGroupId: group.id,
+						about: `Cheque rechazado: cobrar a ${seller.name}`,
+					},
+				];
+				const balances = new Map<string, number>([[sellerReceivable.id, receivableBalance]]);
+
+				if (originalStatus === "PURCHASED") {
+					const walletBalance =
+						(Number.parseFloat(walletAccount!.currentBalance ?? "0") || 0) - purchaseCost;
+					balances.set(walletAccount!.id, walletBalance);
+					rows.unshift({
+						date: rejectionDate,
+						amount: money(purchaseCost),
+						balance: money(walletBalance),
+						transactionType: "CREDIT",
+						toAccountId: walletAccount!.id,
+						memberId: member.id,
+						personId: seller.id,
+						transactionGroupId: group.id,
+						about: `Salida de cartera por rechazo de cheque ${check.checkNumber || ""}`.trim(),
+					});
+				} else {
+					const payableBalance =
+						(Number.parseFloat(checksPayableAccount!.currentBalance ?? "0") || 0) + grossValue;
+					balances.set(checksPayableAccount!.id, payableBalance);
+					rows.push({
+						date: new Date(rejectionDate.getTime() + 1),
+						amount: money(grossValue),
+						balance: money(payableBalance),
+						transactionType: "CREDIT",
+						toAccountId: checksPayableAccount!.id,
+						memberId: member.id,
+						personId: buyer!.id,
+						transactionGroupId: group.id,
+						about: `Cheque rechazado: obligación con ${buyer!.name}`,
+					});
+				}
+
+				await tx.insert(Transaction).values(rows);
+				await tx.insert(CheckOnTransactionGroup).values({
+					checkId: check.id,
+					transactionGroupId: group.id,
+				});
+				await tx
+					.update(Check)
+					.set({
+						status: "REJECTED",
+						rejectionDate,
+						rejectionReason: input.reason,
+						rejectedFromStatus: originalStatus,
+						updatedAt: new Date(),
+					})
+					.where(eq(Check.id, check.id));
+
+				for (const [accountId, balance] of balances) {
+					await tx
+						.update(AccountOnBusiness)
+						.set({ currentBalance: money(balance), lastTransactionDate: rejectionDate, updatedAt: new Date() })
+						.where(eq(AccountOnBusiness.id, accountId));
+				}
+				const peopleSubAccounts = await tx
+					.select({ currentBalance: AccountOnBusiness.currentBalance })
+					.from(AccountOnBusiness)
+					.where(
+						and(
+							eq(AccountOnBusiness.businessId, business.id),
+							eq(AccountOnBusiness.dictionaryAccountId, peopleAccount.dictionaryAccountId),
+							eq(AccountOnBusiness.subAccount, true),
+							eq(AccountOnBusiness.discharged, true),
+						),
+					);
+				const peopleBalance = peopleSubAccounts.reduce(
+					(total, account) => total + (Number.parseFloat(account.currentBalance ?? "0") || 0),
+					0,
+				);
+				await tx
+					.update(AccountOnBusiness)
+					.set({ currentBalance: money(peopleBalance), lastTransactionDate: rejectionDate, updatedAt: new Date() })
+					.where(eq(AccountOnBusiness.id, peopleAccount.id));
+
+				return {
+					checkId: check.id,
+					status: "REJECTED" as const,
+					rejectedFromStatus: originalStatus,
+					transactionGroupId: group.id,
+					sellerName: seller.name,
+					buyerName: buyer?.name ?? null,
+					grossValue: money(grossValue),
 				};
 			});
 		}),

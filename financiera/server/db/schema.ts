@@ -94,6 +94,8 @@ export const EntityTypeEnum = pgEnum("entityType", [
 export const OperationTypeEnum = pgEnum("operationType", [
 	'CHECK_SALE',
 	'CHECK_PURCHASE',
+	'CHECK_DEPOSIT',
+	'CHECK_REJECTION',
 	'LOAN',
 	'CREDIT',
 	'CABLE',
@@ -501,6 +503,11 @@ export const Check = pgTable('check', {
 	updatedAt: timestamp('updatedAt'),
 	purchaseDate: timestamp('purchaseDate'),
 	saleDate: timestamp('saleDate'),
+	depositDate: timestamp('depositDate'),
+	rejectionDate: timestamp('rejectionDate'),
+	rejectionReason: varchar('rejectionReason', { length: 1000 }),
+	rejectedFromStatus: CheckStatusEnum('rejectedFromStatus'),
+	depositAccountId: uuid('depositAccountId').references(() => AccountOnBusiness.id, { onDelete: 'set null' }),
 	buyerPersonId: uuid('buyerPersonId').references(() => Person.id, { onDelete: 'set null' }),
 	collectionDate: timestamp('collectionDate').notNull(),
 	serviceFeeRate: numeric('serviceFeeRate').notNull(),
@@ -553,6 +560,10 @@ export const CheckRelations = relations(Check, ({ one }) => ({
 		relationName: 'buyer',
 		fields: [Check.buyerPersonId],
 		references: [Person.id]
+	}),
+	depositAccount: one(AccountOnBusiness, {
+		fields: [Check.depositAccountId],
+		references: [AccountOnBusiness.id]
 	})
 }));
 

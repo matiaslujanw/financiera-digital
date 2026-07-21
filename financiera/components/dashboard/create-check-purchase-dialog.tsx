@@ -307,6 +307,7 @@ export function CreateCheckPurchaseDialog({ guildSlug }: { guildSlug: string }) 
 									type="date"
 									value={purchaseDate}
 									onChange={(event) => setPurchaseDate(event.target.value)}
+									onInput={(event) => setPurchaseDate(event.currentTarget.value)}
 									required
 								/>
 							</div>
@@ -406,12 +407,19 @@ export function CreateCheckPurchaseDialog({ guildSlug }: { guildSlug: string }) 
 														<Badge variant="secondary">{index + 1}</Badge>
 													</TableCell>
 													<TableCell>
-														<Input
-															type="date"
-															value={check.collectionDate}
-															onChange={(event) =>
-																updateCheck(check.id, { collectionDate: event.target.value })
-															}
+												<Input
+													type="date"
+													value={check.collectionDate}
+													onChange={(event) =>
+														updateCheck(check.id, {
+															collectionDate: event.target.value,
+														})
+													}
+													onInput={(event) =>
+														updateCheck(check.id, {
+															collectionDate: event.currentTarget.value,
+														})
+													}
 															required
 														/>
 													</TableCell>

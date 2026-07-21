@@ -23,7 +23,7 @@ Tener de nuevo funcionando el sistema de gestión de la financiera (descuento de
 ### Continuar en otra sesión / otra computadora (handoff)
 En **otra computadora** el contexto viaja SOLO por el repo (este `PLAN.md`) — las memorias quedan en la máquina original. Este PLAN es autosuficiente. Pegá este prompt en la sesión nueva:
 
-> Estoy reviviendo un sistema de gestión de una financiera. Repo: https://github.com/matiaslujanw/financiera-digital (cloná si hace falta). La app está en `financiera/` (Next.js). Setup: `cd financiera && npm install`, después `npm run dev` (levanta pg-server en :5433 + Next en :3000). **Antes de programar, leé `PLAN.md` en la raíz de punta a punta** — tiene el roadmap, el estado, las decisiones técnicas y la Fase 2. Estado: Fases 0 y 1 completas (auth + negocio + dashboard + transacción regular con balances). Seguimos con la **Fase 2 (cheques): COMPRA de cheques**. Las fórmulas ya están confirmadas en el PLAN (sección "Fórmulas confirmadas"): implementá según eso, apoyándote en los archivos de referencia `transaction.ts` (`createMultiple`), `special.tsx` y `create.tsx`. La base local arranca vacía en una compu nueva (registrá un negocio en `/register`). Empezá mostrándome un plan corto de cómo vas a portar la compra de cheques antes de codear.
+> Estoy reviviendo un sistema de gestión de una financiera. Repo: https://github.com/matiaslujanw/financiera-digital (cloná si hace falta). La app está en `financiera/` (Next.js). Setup: `cd financiera && npm install`, después `npm run dev` (levanta pg-server en :5433 + Next en :3000). **Antes de programar, leé `PLAN.md` en la raíz de punta a punta** — tiene el roadmap, el estado y las decisiones técnicas. Estado: Fases 0, 1 y 2 completas (auth, negocio, dashboard, transacciones y ciclo de cheques). Seguimos con la **Fase 3: préstamos y créditos con cuotas**. La base local arranca vacía en una compu nueva (registrá un negocio en `/register`). Revisá los archivos de referencia `loan.ts`, `loan.tsx`, `credit.ts` y `credit.tsx`, y mostrame un plan corto antes de codear.
 
 ---
 
@@ -33,7 +33,7 @@ En **otra computadora** el contexto viaja SOLO por el repo (este `PLAN.md`) — 
 |---|------|--------|--------------------|
 | 0 | Cimientos (scaffold, DB, auth, dashboard) | ✅ | La app enciende: login → negocio → dashboard |
 | 1 | Transacción regular (movimientos + balances) | ✅ | Crear movimientos entre cuentas y ver balances actualizados |
-| 2 | Cheques (compra / venta) | 🔜 | Operaciones especiales de cheques con pesificación/interés/desagio |
+| 2 | Cheques (compra / venta) | ✅ | Operaciones especiales y ciclo completo de cheques |
 | 3 | Préstamos y Créditos (cuotas) | ⬜ | Alta de préstamos/créditos y cobro de cuotas |
 | 4 | Cables y Cambio de divisas | ⬜ | Transferencias con comisión y conversión de moneda |
 | 5 | Entidades y catálogos (personas, subcuentas, categorías) | ⬜ | ABM de clientes, subcuentas y categorías |
@@ -74,7 +74,7 @@ Next 16 dev levanta **varios procesos**, y cada uno abría su propia instancia d
 
 ---
 
-## Fase 2 — Cheques (compra / venta) 🔜
+## Fase 2 — Cheques (compra / venta) ✅
 
 **Meta:** las operaciones especiales de cheques, que son el corazón de la financiera.
 
@@ -105,6 +105,10 @@ Todo se agrupa en un `TransactionGroup` con `operationType = CHECK_PURCHASE`, y 
 
 Las 4 transacciones por cheque vendido son: **Cartera de cheques −netoCompra**, **Efectivo +netoVenta**, **Pesificación −pesificaciónVenta** e **Intereses cobrados −interésVenta**. Se agrupan en `CHECK_SALE` y el cheque pasa a `SOLD`; los vencidos no se pueden vender.
 
+**DEPÓSITO:** desde `PURCHASED` y al alcanzar la fecha de cobro, **Cartera de cheques −netoCompra** y la cuenta elegida (Banco o Efectivo) **+bruto**. Se agrupa en `CHECK_DEPOSIT` y pasa a `DEPOSITED`.
+
+**RECHAZO:** se registra fecha y motivo, conservando siempre al vendedor original. Desde `PURCHASED`, **Cartera −netoCompra** y la subcuenta de Personas del vendedor **+bruto**. Desde `SOLD`, la subcuenta del vendedor **+bruto** y **Cheques a pagar +bruto**, vinculando la obligación al comprador. Se agrupa en `CHECK_REJECTION`, pasa a `REJECTED` y no mueve Efectivo hasta registrar un pago real.
+
 - [x] **(0)** Preguntas de fórmulas respondidas por el usuario ✔
 - [x] Portar `calculatePurchaseValues` a `server/api/lib/financial-utils` con las fórmulas confirmadas + pruebas unitarias
 - [x] Portar `calculateSaleValues` con pruebas unitarias
@@ -112,10 +116,12 @@ Las 4 transacciones por cheque vendido son: **Cartera de cheques −netoCompra**
 - [x] UI compra: formulario con pesificación %, interés mensual %, cliente, fecha; filas de cheque (fecha cobro, clearing, monto, librador, N°, banco); totales en vivo
 - [x] **Venta de cheques:** selección de cheques disponibles, cálculo de neto/interés, `TransactionGroup` `CHECK_SALE`. Cheque queda `SOLD`
 - [x] UI venta: selección múltiple, vencimiento, días en cartera, días de cálculo, costo de compra, valor de venta, ganancia/pérdida y rentabilidad, por cheque y total
-- [x] Estados del cheque `PURCHASED` / `SOLD`
-- [ ] Estados restantes del cheque `DEPOSITED` / `REJECTED`
+- [x] Estados del cheque `PURCHASED` / `SOLD` / `DEPOSITED` / `REJECTED`
+- [x] Depósito opcional a Banco/Efectivo con salida de cartera y cobro del nominal
+- [x] Rechazo desde cartera o desde un cheque vendido, con vendedor original, comprador, motivo y cuentas de seguimiento
 - [x] **Verificación compra → venta:** ganancia y balances comprobados en navegador y DB
 - [x] **Verificación parcial (compra):** compra simple ($100.000 → neto $90.600) y múltiple (2 cheques → 8 movimientos) comprobadas en navegador/DB; balances, grupo y estado `PURCHASED` correctos
+- [x] **Verificación de cierre:** depósito, rechazo desde cartera y rechazo posterior a una venta comprobados en navegador y DB
 
 ---
 
@@ -231,4 +237,12 @@ utils/        format.ts, dayjs.ts
 - Agregada UI de venta múltiple con comprador, fecha y tasas. Cada fila muestra costo de compra, valor de venta, ganancia/pérdida, días en cartera y días usados para calcular el precio; el resumen agrega valor de venta, resultado, rentabilidad y permanencia promedio.
 - Verificado end-to-end con F2-001: costo $90.600, venta $95.300, ganancia $4.700 y 5 días en cartera. Persistió `SOLD`, comprador, grupo `CHECK_SALE` y exactamente 4 movimientos; los balances quedaron consistentes.
 - Corregido el prefetch de RSC para esperar las consultas antes de hidratar y evitar que el contador de transacciones difiriera entre servidor y cliente.
-- Pendiente de Fase 2: definir e implementar depósito y rechazo (`DEPOSITED` / `REJECTED`).
+- El siguiente bloque fue completar depósito y rechazo (`DEPOSITED` / `REJECTED`).
+
+### 2026-07-21 — Fase 2 completada: depósito y rechazo
+- Agregadas migración y operaciones `CHECK_DEPOSIT` / `CHECK_REJECTION`, con fecha de depósito, cuenta de acreditación, fecha/motivo de rechazo y estado previo al rechazo.
+- Nueva pantalla **Estado de cheques** con filtros, vencimientos, vendedor original, comprador, valores de compra/venta y seguimiento. Las acciones se habilitan al llegar la fecha de cobro.
+- Un rechazo desde cartera saca el neto de Cartera y registra el nominal por cobrar en la subcuenta del vendedor. Si el cheque ya fue vendido, registra el nominal por cobrar al vendedor y el mismo nominal en Cheques a pagar, vinculado al comprador; no modifica caja automáticamente.
+- Verificado end-to-end y en DB: F2-R01 vendido y luego rechazado ($40.000 a cobrar y $40.000 a pagar), F2-RP01 rechazado desde cartera ($25.000 a cobrar) y F2-D01 depositado en Banco ($30.000 nominal). Cada cierre creó exactamente 2 movimientos y su grupo correspondiente.
+- Corregida la sincronización del input nativo de fecha de compra/cobro detectada durante la prueba visual.
+- **Próximo:** Fase 3, préstamos y créditos con cuotas.

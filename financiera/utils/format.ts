@@ -16,6 +16,8 @@ export function formatPrice(value: number | string | null | undefined): string {
 const OPERATION_LABELS: Record<OperationType, string> = {
 	CHECK_PURCHASE: "C. de cheques",
 	CHECK_SALE: "V. de cheques",
+	CHECK_DEPOSIT: "Dep. de cheque",
+	CHECK_REJECTION: "Cheque rechazado",
 	LOAN: "Préstamo",
 	CREDIT: "Crédito",
 	CABLE: "Cable",
