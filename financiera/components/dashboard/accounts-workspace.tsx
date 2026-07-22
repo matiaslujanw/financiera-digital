@@ -145,27 +145,47 @@ export function AccountsWorkspace({ guildSlug }: { guildSlug: string }) {
 											<p className="text-muted-foreground px-2 pb-1 text-[10px] font-medium uppercase">
 												{ACCOUNT_TYPE_LABELS[type]}
 											</p>
-											{accounts.map((item) => (
+											{accounts.map((item) => {
+												const isActive = selectedAccountId === item.id;
+												return (
 												<button
 													key={item.id}
 													type="button"
 													onClick={() => setSelectedByUser(item.id)}
 													className={cn(
-														"flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors",
-														selectedAccountId === item.id
-															? "bg-accent text-accent-foreground"
-															: "hover:bg-accent/50",
+														"flex w-full items-center gap-2 rounded-lg py-2 pr-2 text-left transition-colors",
+														isActive ? "bg-accent" : "hover:bg-accent/50",
 													)}
 												>
+													<span
+														aria-hidden
+														className={cn(
+															"h-8 w-[3px] shrink-0 rounded-full transition-colors",
+															isActive ? "bg-primary" : "bg-transparent",
+														)}
+													/>
 													<div className="min-w-0 flex-1">
-														<p className="truncate text-sm">{item.name}</p>
+														<p
+															className={cn(
+																"truncate text-sm",
+																isActive && "text-primary font-medium",
+															)}
+														>
+															{item.name}
+														</p>
 														<p className="text-muted-foreground text-xs tabular-nums">
 															{formatCurrency(item.currentBalance, item.currency)}
 														</p>
 													</div>
-													<ChevronRight className="text-muted-foreground size-4" />
+													<ChevronRight
+														className={cn(
+															"size-4",
+															isActive ? "text-primary" : "text-muted-foreground",
+														)}
+													/>
 												</button>
-											))}
+												);
+											})}
 										</div>
 									);
 								})}
@@ -195,7 +215,7 @@ export function AccountsWorkspace({ guildSlug }: { guildSlug: string }) {
 								<p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
 									Saldo actual
 								</p>
-								<p className="text-2xl font-semibold tabular-nums">
+								<p className="text-primary font-mono text-3xl font-semibold tabular-nums tracking-tight">
 									{formatCurrency(account.currentBalance, account.currency)}
 								</p>
 								<Badge variant="outline">{account.currency}</Badge>
@@ -263,7 +283,7 @@ export function AccountsWorkspace({ guildSlug }: { guildSlug: string }) {
 												<TableCell
 													className={cn(
 														"text-right font-medium tabular-nums",
-														transaction.signedAmount >= 0 ? "text-emerald-500" : "text-rose-500",
+														transaction.signedAmount >= 0 ? "text-success" : "text-destructive",
 													)}
 												>
 													{transaction.signedAmount >= 0 ? "+" : "−"}

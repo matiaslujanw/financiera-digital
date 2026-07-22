@@ -444,7 +444,7 @@ export function CreateCheckSaleDialog({ guildSlug }: { guildSlug: string }) {
 													<TableCell className="text-right tabular-nums">{formatPrice(row.check.grossValue)}</TableCell>
 													<TableCell className="text-right tabular-nums">{formatPrice(row.purchaseCost)}</TableCell>
 													<TableCell className="text-right font-medium tabular-nums">{row.values ? formatPrice(row.values.netValue) : "—"}</TableCell>
-													<TableCell className={`text-right font-medium tabular-nums ${row.profit !== null && row.profit >= 0 ? "text-emerald-600" : "text-red-500"}`}>{row.profit !== null ? formatPrice(row.profit) : "—"}</TableCell>
+													<TableCell className={`text-right font-medium tabular-nums ${row.profit !== null && row.profit >= 0 ? "text-success" : "text-destructive"}`}>{row.profit !== null ? formatPrice(row.profit) : "—"}</TableCell>
 													<TableCell>
 														{row.expired ? <Badge variant="destructive">Vencido</Badge> : row.beforePurchase ? <Badge variant="destructive">Fecha inválida</Badge> : row.values ? <Badge variant="outline">Apto</Badge> : <Badge variant="secondary">Completar tasas</Badge>}
 													</TableCell>
@@ -473,7 +473,7 @@ function SaleTotalCard({ label, value, emphasis, tone }: { label: string; value:
 	return (
 		<div className={emphasis ? "bg-primary text-primary-foreground rounded-lg border p-4" : "bg-muted/40 rounded-lg border p-4"}>
 			<p className={emphasis ? "text-primary-foreground/70 text-xs" : "text-muted-foreground text-xs"}>{label}</p>
-			<p className={`mt-1 text-lg font-semibold tabular-nums ${tone === "positive" ? "text-emerald-600" : tone === "negative" ? "text-red-500" : ""}`}>{formatPrice(value)}</p>
+			<p className={`mt-1 text-lg font-semibold tabular-nums ${tone === "positive" ? "text-success" : tone === "negative" ? "text-destructive" : ""}`}>{formatPrice(value)}</p>
 		</div>
 	);
 }

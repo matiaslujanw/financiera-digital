@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+	ArrowLeftRight,
 	BadgeDollarSign,
 	Landmark,
 	PanelLeftClose,
@@ -15,6 +16,7 @@ import {
 import { cn } from "~/lib/utils";
 
 const navItems = [
+	{ segment: "transactions", label: "Transacciones", icon: ArrowLeftRight },
 	{ segment: "accounts", label: "Cuentas", icon: WalletCards },
 	{ segment: "operations", label: "Operaciones", icon: ReceiptText },
 ] as const;
@@ -84,7 +86,7 @@ export function DashboardSidebar(props: {
 								"flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
 								collapsed && "justify-center px-2",
 								active
-									? "bg-sidebar-accent text-sidebar-accent-foreground"
+									? "bg-sidebar-accent text-primary"
 									: "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
 							)}
 							aria-label={item.label}
@@ -135,7 +137,7 @@ export function DashboardMobileNav({ guildSlug }: { guildSlug: string }) {
 						aria-label={item.label}
 						className={cn(
 							"rounded-lg p-2",
-							active ? "bg-accent text-foreground" : "text-muted-foreground",
+							active ? "bg-accent text-primary" : "text-muted-foreground",
 						)}
 					>
 						<Icon className="size-5" />

@@ -45,6 +45,29 @@ En **otra computadora** el contexto viaja SOLO por el repo (este `PLAN.md`) — 
 
 ---
 
+## Transversal — UI/UX y refinamientos (en curso, 2026-07)
+
+Trabajo que cruza varias fases y no encaja en una sola. Rama: `rediseno-dorado-neon`.
+
+### Sistema de diseño "dorado neón" 🔜
+- Dirección (confirmada con el usuario): **minimalista, negro profundo + oro neón** como único acento (marca, estado activo, CTA principal, foco/ring, saldo-héroe); montos oro = positivo / rojo = negativo. Tipografía **Geist** (UI) + **Geist Mono** (números tabulares), sin serif. El neón se usa *sparse*: reservado para los momentos clave, no inundar de oro.
+- [x] Tokens de color (`app/globals.css`, bloque `.dark` — la app está dark-forzada) reescritos a `oklch` dorado/negro; token `--success` agregado (oro); bug `--font-sans` (se auto-referenciaba → los títulos caían a una serif de fallback) corregido → `var(--font-geist-sans)`.
+- [x] Aplicado a **Cuentas** (saldo-héroe en oro/mono, cuenta activa con barra dorada), **Operaciones** (nav activo y CTA en oro) y **Transacciones** (ver abajo). Barrido de colores hardcodeados (`emerald`/`rose`/`red`/`green`) a la semántica `text-success` (oro) / `text-destructive` (rojo) en los diálogos de transacción, compra y venta.
+- [ ] Aplicar al resto: diálogos de divisas y cuenta, Estado de cheques, login/register, detalle de operación y empty states.
+
+### Pantalla Transacciones (home) — revivida ✅
+- Estaba desconectada desde la Fase 3 (`/transactions` redirigía a Cuentas). **Reconectada como landing** (el login/root ya apuntaba a `/transactions`). Layout (a pedido del usuario, apilado en una columna): **Crear transacción** arriba, **tabla de movimientos** en el medio y **Resumen de cuentas colapsable** al final (colapsado por defecto, expande en grilla ancha). Agregada al sidebar como primer ítem. Cuentas y Operaciones siguen como vistas aparte.
+- [x] Reutilizados los componentes huérfanos `accounts-summary` y `transactions-table` (eran el dashboard MVP de la Fase 0), estilizados en dorado neón (totales en oro, números en mono).
+- [x] Nuevo **creador de transacción inline** (`create-transaction-inline.tsx`, panel con borde dorado): Empresa, Cuenta desde → hacia (transferencia doble entrada), Decremento/Incremento, Descripción, Fecha. Sólo cuentas sin subcuenta y misma moneda (si difieren → «Cambiar divisas»). **Verificado end-to-end:** ingreso de $500.000 en Efectivo → Resumen y Total actualizados; typecheck + lint limpios.
+- [ ] **Paso 2 — Categoría y Subcuenta (como en la imagen):** el router `transaction.create` ya acepta `categoryId` y `entityId/entityType`, pero **faltan los endpoints de catálogo** (listar/crear categorías y personas/entidades) — es un pedazo de la Fase 7. Sin eso los selects arrancan vacíos, por eso se dejaron fuera del paso 1.
+
+### Refinamiento funcional — selector de cuenta en cheques ⬜
+- Hoy la **compra y venta de cheques fuerzan "Efectivo"** como pata de caja (`server/api/router/check.ts` → `accountBySlug("efectivo")`). El usuario quiere **elegir** la cuenta que paga/recibe (Efectivo, Banco, etc.).
+- El flujo de **depósito** ya tiene selector de cuenta → patrón a copiar.
+- [ ] Agregar selector de cuenta ASSET en compra y venta (UI + router + validators).
+
+---
+
 ## Fase 0 — Cimientos ✅
 
 - [x] Scaffold Next.js 16 (App Router, TS, Tailwind v4, alias `~/*` + `@acme/*`)
@@ -308,3 +331,18 @@ utils/        format.ts, dayjs.ts
 - Verificado en navegador sobre PGlite real: sidebar colapsado/expandido; creación de `Caja USD`; compra de USD 10 entregando ARS 10.000 a cotización 1.000; venta de USD 4 recibiendo ARS 4.400 a cotización 1.100. Ambas quedaron agrupadas y visibles en Operaciones.
 - Calidad: 7 pruebas financieras correctas (incluyen compra, venta y cruce de divisas), lint limpio y build de producción correcto.
 - **Próximo:** definir y comenzar la Fase 5, préstamos y créditos con cuotas.
+
+### 2026-07-22 — Recuperación de DB, rediseño UI (dorado neón) y relevamiento
+- La base local `.pglite` estaba **corrupta** (WASM `Aborted()` al abrir; un directorio nuevo funcionaba, así que no era Node 26). Se movió a backup `.pglite.corrupt-<fecha>` y el pg-server recreó la DB limpia con migraciones. La data de prueba anterior se perdió (esperado: era testing y no viaja en el repo). Se registró negocio nuevo con `mati@test.com`.
+- **Recorrida de UI/UX** de Cuentas y Operaciones. Confirmado que casi todo lo que el usuario pedía ya funciona (la venta muestra costo de compra / valor de venta / ganancia; las divisas debitan y acreditan las cuentas elegidas con la cotización). Único gap funcional detectado: el **selector de cuenta en cheques** (ver Transversal).
+- Elegida y arrancada la **dirección de diseño "dorado neón sobre negro"** minimalista (ver sección Transversal). Aplicada a Cuentas y Operaciones. Rama `rediseno-dorado-neon`.
+- Setup: se instaló el CLI `claude` global (npm) y se agregó el MCP de **21st.dev** (componentes UI) para el trabajo de diseño.
+- **Próximo:** seguir aplicando el diseño al resto de pantallas/diálogos e implementar el selector de cuenta en compra/venta de cheques; después retomar la Fase 5.
+
+### 2026-07-22 — Pantalla Transacciones (home) revivida + creador inline
+- El usuario aclaró que la pantalla clave es **Transacciones** (la landing donde se generan movimientos y se ven abajo), no Operaciones. Estaba desconectada desde la Fase 3.
+- **Reconectada** `/transactions` para renderizar los componentes huérfanos `accounts-summary` + `transactions-table` (dashboard MVP de la Fase 0), estilizados en dorado neón. Agregada al sidebar como primer ítem.
+- Nuevo **creador de transacción inline** (`create-transaction-inline.tsx`): doble entrada (Cuenta desde → hacia), Decremento/Incremento, misma moneda, cuentas sin subcuenta. **Verificado end-to-end** (ingreso $500.000 en Efectivo → Resumen y Total actualizados). Typecheck + lint OK.
+- **Layout final (a pedido):** una columna → Crear transacción arriba, tabla de movimientos en el medio, Resumen de cuentas colapsable al final.
+- Pendiente **paso 2**: campos Categoría y Subcuenta en el creador (requieren endpoints de catálogo, parte de la Fase 7).
+- Commit + push en la rama `rediseno-dorado-neon`.

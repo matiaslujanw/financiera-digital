@@ -559,7 +559,7 @@ function TotalCard({
 				{label}
 			</p>
 			<p
-				className={`mt-1 text-lg font-semibold tabular-nums ${tone === "positive" && !emphasis ? "text-emerald-600" : ""}`}
+				className={`mt-1 text-lg font-semibold tabular-nums ${tone === "positive" && !emphasis ? "text-success" : ""}`}
 			>
 				{formatPrice(value)}
 			</p>

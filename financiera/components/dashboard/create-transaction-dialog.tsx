@@ -161,7 +161,7 @@ export function CreateTransactionDialog({ guildSlug }: { guildSlug: string }) {
 							className={cn(
 								"flex items-center justify-center gap-2 rounded-md border p-2 text-sm font-medium transition-colors",
 								direction === "increment"
-									? "border-emerald-600 bg-emerald-600/10 text-emerald-500"
+									? "border-primary bg-primary/10 text-primary"
 									: "text-muted-foreground hover:bg-accent",
 							)}
 						>
@@ -174,7 +174,7 @@ export function CreateTransactionDialog({ guildSlug }: { guildSlug: string }) {
 							className={cn(
 								"flex items-center justify-center gap-2 rounded-md border p-2 text-sm font-medium transition-colors",
 								direction === "decrement"
-									? "border-red-600 bg-red-600/10 text-red-500"
+									? "border-destructive bg-destructive/10 text-destructive"
 									: "text-muted-foreground hover:bg-accent",
 							)}
 						>
@@ -191,6 +191,7 @@ export function CreateTransactionDialog({ guildSlug }: { guildSlug: string }) {
 							placeholder="0,00"
 							value={amount}
 							onChange={(e) => setAmount(e.target.value)}
+							className="font-mono text-base tabular-nums"
 						/>
 					</div>
 

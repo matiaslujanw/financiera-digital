@@ -5,7 +5,6 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useTRPC } from "~/trpc/react";
 import { dayjs } from "~/utils/dayjs";
 import { formatPrice, getTypeLabel } from "~/utils/format";
-import { CreateTransactionDialog } from "./create-transaction-dialog";
 import { CreateCheckPurchaseDialog } from "./create-check-purchase-dialog";
 import { CreateCheckSaleDialog } from "./create-check-sale-dialog";
 import { ManageChecksDialog } from "./manage-checks-dialog";
@@ -44,17 +43,16 @@ export function TransactionsTable({ guildSlug }: { guildSlug: string }) {
 	const items = data?.pages.flatMap((p) => p.items) ?? [];
 
 	return (
-		<div className="bg-card flex h-full flex-col overflow-hidden rounded-lg border">
+		<div className="bg-card flex h-full flex-col overflow-hidden rounded-xl border">
 			<div className="flex items-center justify-between border-b p-4">
 				<div className="flex items-center gap-2">
 					<h2 className="font-semibold">Transacciones</h2>
-					<Badge variant="secondary">{countQuery.data ?? 0}</Badge>
+					<Badge variant="secondary" className="tabular-nums">{countQuery.data ?? 0}</Badge>
 				</div>
 				<div className="flex flex-wrap items-center justify-end gap-2">
 					<CreateCheckPurchaseDialog guildSlug={guildSlug} />
 					<CreateCheckSaleDialog guildSlug={guildSlug} />
 					<ManageChecksDialog guildSlug={guildSlug} />
-					<CreateTransactionDialog guildSlug={guildSlug} />
 				</div>
 			</div>
 
@@ -110,7 +108,7 @@ export function TransactionsTable({ guildSlug }: { guildSlug: string }) {
 								<TableCell className="max-w-xs truncate">
 									{t.about ?? t.transactionGroup?.name ?? "—"}
 								</TableCell>
-								<TableCell className="text-right tabular-nums">
+								<TableCell className="text-right font-mono tabular-nums">
 									{formatPrice(t.amount)}
 								</TableCell>
 								<TableCell className="whitespace-nowrap">
