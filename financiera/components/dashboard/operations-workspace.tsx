@@ -254,7 +254,7 @@ export function OperationsWorkspace({ guildSlug }: { guildSlug: string }) {
 													className={cn(
 														"font-medium",
 														operation.metricLabel === "Resultado" &&
-															(operation.metricAmount >= 0 ? "text-emerald-500" : "text-rose-500"),
+															(operation.metricAmount >= 0 ? "text-success" : "text-destructive"),
 													)}
 												>
 													{formatPrice(operation.metricAmount)}
@@ -295,15 +295,9 @@ export function OperationsWorkspace({ guildSlug }: { guildSlug: string }) {
 
 function OperationBadge({ type }: { type: OperationType }) {
 	const className =
-		type === "CHECK_SALE"
-			? "border-emerald-500/30 bg-emerald-500/10 text-emerald-500"
-			: type === "CHECK_REJECTION"
-				? "border-rose-500/30 bg-rose-500/10 text-rose-500"
-				: type === "CHECK_PURCHASE"
-					? "border-sky-500/30 bg-sky-500/10 text-sky-500"
-					: type === "CURRENCY_EXCHANGE"
-						? "border-amber-500/30 bg-amber-500/10 text-amber-500"
-						: "";
+		type === "CHECK_REJECTION"
+			? "border-destructive/30 bg-destructive/10 text-destructive"
+			: "";
 	return (
 		<Badge variant="outline" className={className}>
 			{getTypeLabel(type)}
@@ -400,7 +394,7 @@ function OperationDetail({ operation }: { operation: Operation }) {
 												<TableCell className="text-right tabular-nums">{formatPrice(check.grossValue)}</TableCell>
 												<TableCell className="text-right tabular-nums">{formatPrice(check.netValue)}</TableCell>
 												<TableCell className="text-right tabular-nums">{check.saleNetValue ? formatPrice(check.saleNetValue) : "—"}</TableCell>
-												<TableCell className={cn("text-right font-medium tabular-nums", check.saleNetValue && (profit >= 0 ? "text-emerald-500" : "text-rose-500"))}>
+												<TableCell className={cn("text-right font-medium tabular-nums", check.saleNetValue && (profit >= 0 ? "text-success" : "text-destructive"))}>
 													{check.saleNetValue ? formatPrice(profit) : "—"}
 												</TableCell>
 											</TableRow>
@@ -477,7 +471,7 @@ function Metric(props: {
 				className={cn(
 					"mt-1 text-lg font-semibold tabular-nums",
 					props.result && props.value !== null &&
-						(props.value >= 0 ? "text-emerald-500" : "text-rose-500"),
+						(props.value >= 0 ? "text-success" : "text-destructive"),
 				)}
 			>
 				{props.text ??

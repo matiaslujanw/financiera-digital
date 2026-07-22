@@ -351,7 +351,7 @@ function FilterButton({ active, onClick, label, count }: { active: boolean; onCl
 
 function StatusBadge({ status }: { status: CheckStatus }) {
 	if (status === "REJECTED") return <Badge variant="destructive"><CircleX /> Rechazado</Badge>;
-	if (status === "DEPOSITED") return <Badge className="bg-emerald-600 text-white"><BadgeCheck /> Depositado</Badge>;
+	if (status === "DEPOSITED") return <Badge className="bg-success text-success-foreground"><BadgeCheck /> Depositado</Badge>;
 	if (status === "SOLD") return <Badge variant="secondary">Vendido</Badge>;
 	return <Badge variant="outline">En cartera</Badge>;
 }
